@@ -1,0 +1,5 @@
+"0","```bash
+alias rm=\"rm -i\"
+cd /d/in16/u/sj003
+my_path=$(echo $PWD)
+```"

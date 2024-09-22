@@ -1,0 +1,5 @@
+"0","```bash
+nohup transit gumbel B_R1.wig,D_R1.wig,G_R1.wig $my_path/refseqs/mbovis/mbovis.prot_table $my_path/mbovis/transit/bovis_nonorm.txt -r Sum &>run_tradis_out &
+
+nohup transit gumbel B_R1_TTR.wig,D_R1_TTR.wig,G_R1_TTR.wig $my_path/refseqs/mbovis/mbovis.prot_table $my_path/mbovis/transit/bovis_TTR.txt -r Sum >& run_tradis_TTR_out &
+```"

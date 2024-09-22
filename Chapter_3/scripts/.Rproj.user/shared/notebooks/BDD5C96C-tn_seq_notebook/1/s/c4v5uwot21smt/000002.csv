@@ -1,0 +1,6 @@
+"0","```r
+essential_genes_custom <- bovis_custom[bovis_custom$Call == 'ES',]
+
+essential_genes_custom$Name
+
+```"

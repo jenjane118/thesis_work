@@ -1,0 +1,3192 @@
+---
+title: "Re-analysis invitro tnseq"
+output: 
+  html_notebook: default
+date: "2023.09.25"
+author: "Jennifer Stiens"
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+i_am("Tn_seq_project.Rproj")
+
+library(here)
+library(tidyverse)
+
+```
+
+
+Jupyter notebook for basic code:
+/Users/jenniferstiens/tn_seq/scripts/invitro_tnseq_code.ipynb
+
+# Mbovis insertion analysis
+
+```{r bovis_distributions}
+library(tidyverse)
+library(purrr)
+library(ggplot2)
+library(dplyr)
+library(here)
+
+# sample name, condition, experiment, ta_site, read_count
+data_path = here('in_vitro_data/bovis_hiseq/tpp')
+#wig_files <- dir(data_path, pattern="*.wig$")
+wig_files = list.files(path = data_path, pattern = ".wig$", full.names = FALSE)
+
+df1 <- tibble(sample=wig_files) %>%
+  mutate(file_contents = map(wig_files,         
+           ~ read_delim(file.path(data_path, .), skip=1, delim=" ", show_col_types = F))
+        )  
+colnames(unnest(df1, cols=2))
+# rename with sample name instead of filename (have to do this for specific samples) maybe rename in directory first
+df1[[1]]<-sub("_hiseq_tpp", "", df1[[1]])
+df1[[1]]<-sub(".wig", "", df1[[1]])
+
+# all unnested
+bovis_df1 <- unnest(df1, cols=2)
+#change column names
+bovis_df1 <- rename(bovis_df1, ta_coord = variableStep, 
+       reads = `chrom=Mbovis_AF2122_97`)
+
+saveRDS(bovis_df1, here("R_data/bovis_invitro_insertions.RData"))
+
+nz_sites <- bovis_df1 %>% filter(reads != 0)
+
+#histograms for each
+samples <- unique(nz_sites$sample)
+for (i in 1:3){
+  my_sample <- samples[i]
+  nz_sample <- nz_sites %>% filter(sample=={my_sample}) %>% select(ta_coord, reads)
+  #truncate top 1% of reads
+  nz_trunc <- nz_sample %>% mutate(rank = ntile(reads, 100)) %>% filter(rank != 100)
+
+pl <- ggplot(nz_sample, aes(x=reads)) +
+    geom_histogram(bins=1000) +
+    xlim(1,2000) +
+    ylim(0, 1000) +
+    ggtitle(paste(my_sample, " distribution of non-zero reads"))
+  file <- paste("images/", my_sample, "_nz_distribution.pdf", sep="")
+  ggsave(here(file), pl)
+  png(here(paste("images/", my_sample, "_qq_plot.png", sep="")))
+  qqplot(y= nz_trunc$reads,
+         x=qgeom(ppoints(length(nz_trunc$reads)), 
+                 prob= 1/(mean(nz_trunc$reads))),
+         xlim = c(0, max(
+           qgeom(ppoints(length(nz_trunc$reads)), 
+               prob= 1/(mean(nz_trunc$reads))),
+           nz_trunc$reads )),
+         xlab = "Data Quantiles", 
+         ylab = "Theoretical Quantiles",
+         )
+  qqline(nz_trunc$reads, 
+        distribution = function(p) qgeom(p,
+                                    1/(mean(nz_trunc$reads))),
+       prob = c(0.25, 0.75), col = "red")
+  #abline(0,1, col="blue")
+  dev.off()
+}
+
+#combined dist and qq plots (sum reads)
+sum_nz_reads <- bovis_df1 %>% group_by(ta_coord) %>% summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>% filter(reads > 0)
+#truncate top 1% of reads
+sum_nz_trunc <- sum_nz_reads %>% mutate(rank = ntile(reads, 100)) %>% filter(rank != 100)
+
+ggplot(sum_nz_reads, aes(x=reads)) +
+    geom_histogram(bins=1000) +
+    xlim(1,2000) +
+    ylim(0, 1000) +
+    ggtitle("distribution of summed non-zero reads")
+ggsave(here("images/summed_nz_distribution_bovis.png"))
+png(here("images/summed_bovis_nz_qq_plot.png"))
+qqplot(y= sum_nz_trunc$reads,
+        x=qgeom(ppoints(length(sum_nz_trunc$reads)), 
+                 prob= 1/(mean(sum_nz_trunc$reads))), 
+        xlab = "Data Quantiles", 
+        ylab = "Theoretical Quantiles",
+       xlim = c(0, max(
+           qgeom(ppoints(length(sum_nz_trunc$reads)), 
+               prob= 1/(mean(sum_nz_trunc$reads))),
+           sum_nz_trunc$reads )),
+       )
+qqline(sum_nz_trunc$reads, 
+      distribution = function(p) qgeom(p,                                   1/(mean(sum_nz_trunc$reads))),
+       prob = c(0.25, 0.75), col = "red")
+dev.off()
+
+```
+
+find cumulative insertion density when adding each sample for bovis
+
+```{r cumulative_saturation}
+library(tidyverse)
+library(here)
+
+bovis_df1 <- readRDS(here("R_data/bovis_invitro_insertions.RData"))
+nz_sites <- bovis_df1 %>% filter(reads != 0)
+
+bovis_19 <- nz_sites %>% filter(sample=="bovis_19") %>% select(ta_coord) %>% pull()
+bovis_20 <- nz_sites %>% filter(sample=="bovis_20") %>% select(ta_coord) %>% pull()
+bovis_21 <- nz_sites %>% filter(sample=="bovis_21") %>% select(ta_coord) %>% pull()
+
+#find total insertion density for each sample
+total_ta = 73536
+ins_den_19 <- length(bovis_19) / total_ta
+ins_den_20 <- length(bovis_20) / total_ta
+ins_den_21 <- length(bovis_21) / total_ta
+ins_den <- tibble(sample=c("bovis_19", "bovis_20", "bovis_21"), ins_density = c(ins_den_19, ins_den_20, ins_den_21))
+
+#barplot of insertion density
+library(RColorBrewer)
+ggplot(ins_den, aes(x=sample, y=ins_density, fill=sample)) +
+  geom_bar(stat="identity") +
+  scale_fill_brewer(palette = "Accent") +
+  ggtitle("Comparison of TA site saturation of Mbovis samples") +
+  ylab("insertion density") +
+  theme(axis.title.x = element_blank(), axis.ticks.x = element_blank()) +
+  guides(fill="none")
+ggsave(here("images/Mbovis_insertion_barplot.png"))
+#union of total sites
+bovis_union <- union(union(bovis_19, bovis_20), bovis_21)
+#40482 total ta's hit
+length(bovis_union)/total_ta
+#55% total TA's hit in bovis
+
+#number of total reads with insertions in all reps/exp (union) vs number in common in all samples (intersect)
+int_ta <- intersect(intersect(bovis_19, bovis_20), bovis_21)
+#6925 in common
+length(int_ta)/ length(bovis_union)
+#17% in all
+
+#make df
+cumul_unique <- tibble(
+  dataset=c("bovis_19", "bovis_20", "bovis_21"),
+  len_tas = c(length(bovis_19), length(bovis_20), length(bovis_21)),
+  cum_tas = c(length(bovis_19), length(union(bovis_19, bovis_20)), length(union(union(bovis_19, bovis_20), bovis_21))),
+  cum_ins_den = c(length(bovis_19)/total_ta, length(union(bovis_19, bovis_20))/total_ta, length(union(union(bovis_19, bovis_20), bovis_21))/total_ta)
+  )
+
+#cumul density
+ggplot(cumul_unique, aes(x=dataset, y=len_tas, fill=dataset)) +
+  geom_bar(stat="identity") +
+  geom_line(aes(y=cum_tas), group=1) +
+  geom_point(aes(y=cum_tas), group=1) +
+  scale_fill_brewer(palette = "Accent") +
+  ggtitle("Comparison of TA site saturation of Mbovis samples") +
+  ylab("insertion density") +
+  theme(axis.title.x = element_blank(), axis.ticks.x = element_blank()) +
+  guides(fill="none") +
+  theme(axis.title.y = element_text(size = 12)) +
+  theme(axis.text.x = element_text(size=10))
+ggsave(here("images/mbovis_cumul_density_barplot.png"))
+
+
+```
+
+bovis correlation between samples
+
+```{r correlation_bovis}
+
+## TTR normalised
+library(tidyverse)
+data <- read_delim(here("data/bovis_combined_TTR.wig"), delim="\t", skip=7, col_names = F)
+combined_ttr <- data %>% select(c(X1, X2, X3, X4))
+colnames(combined_ttr) <- c("site", "B", "C", "D")
+
+#transform with log10 because pearson's assumes normal distribution
+#get rid of -Inf
+combined_ttr <- combined_ttr %>% mutate(across(B:D, ~ ifelse(.x != 0, log10(.x), 0), 
+              .names = '{paste("log", .col, sep="")}'))
+
+ttr_mat <- as.matrix(combined_ttr %>% select(c(logB,logC,logD)))
+
+res_ttr <- cor(ttr_mat)
+round(res_ttr, 2)
+
+#corplot
+library(corrplot)
+corrplot(cor(ttr_mat, method="pearson"))
+
+#might be more effective to use mean/sum insertions per gene instead of indiv insertion sites
+gene_b <- read_delim(here("in_vitro_data/bovis_hiseq/hmm_20_05_21/hmm_bovis_19_genes.wig"), skip=3, col_names = T, delim="\t")
+gene_b <- rename(gene_b, ORF= `#ORF`) %>% select(ORF, mean)
+gene_c <- read_delim(here("in_vitro_data/bovis_hiseq/hmm_20_05_21/hmm_bovis_20_genes.wig"), skip=3, col_names = T, delim="\t")
+gene_c <- rename(gene_c, ORF= `#ORF`) %>% select(ORF, mean)
+gene_d <- read_delim(here("in_vitro_data/bovis_hiseq/hmm_20_05_21/hmm_bovis_21_genes.wig"), skip=3, col_names = T, delim="\t")
+gene_d <- rename(gene_d, ORF= `#ORF`) %>% select(ORF, mean)
+
+gene_df <- tibble(gene_b$mean, gene_c$mean, gene_d$mean)
+colnames(gene_df) <- c("b", "c", "d")
+gene_df <- gene_df %>% mutate(across(b:d, ~ ifelse(.x != 0, log10(.x), 0), 
+                                                      .names = '{paste("log", .col, sep="")}'))
+gene_mat <- as.matrix(gene_df[,4:6])
+
+res <- cor(gene_mat, method="pearson")
+round(res, 2)
+corrplot(cor(gene_mat, method="pearson"))
+
+#better correlation between b and d
+
+library(corrplot)
+corrplot(cor(gene_mat))
+
+```
+
+
+### Analyze read distribution/insertions/etc for Mtb
+
+```{r histograms_tb}
+# sample name, condition, experiment, ta_site, read_count
+data_path = here('in_vitro_data/mtb_hiseq/TPP')
+#wig_files <- dir(data_path, pattern="*.wig$")
+wig_files = list.files(path = data_path, pattern = ".wig$", full.names = FALSE)
+
+df1 <- tibble(sample=wig_files) %>%
+  mutate(file_contents = map(wig_files,         
+           ~ read_delim(file.path(data_path, .), skip=1, delim=" ", show_col_types = F))
+        )  
+colnames(unnest(df1, cols=2))
+# rename with sample name instead of filename (have to do this for specific samples) maybe rename in directory first
+df1[[1]]<-sub("_hiseq_tpp", "", df1[[1]])
+df1[[1]]<-sub(".wig", "", df1[[1]])
+
+# all unnested
+mtb_df1 <- unnest(df1, cols=2)
+#change column names
+mtb_df1 <- rename(mtb_df1, ta_coord = variableStep, 
+       reads = `chrom=Mtb_H37Rv`)
+
+saveRDS(mtb_df1, here("R_data/mtb_invitro_insertions.RData"))
+
+nz_sites <- mtb_df1 %>% filter(reads != 0)
+
+#histograms for each
+samples <- unique(nz_sites$sample)
+for (i in 1:2){
+  my_sample <- samples[i]
+  nz_sample <- nz_sites %>% filter(sample=={my_sample}) %>% select(ta_coord, reads)
+  #truncate top 1% of reads
+  nz_trunc <- nz_sample %>% mutate(rank = ntile(reads, 100)) %>% filter(rank != 100)
+
+pl <- ggplot(nz_sample, aes(x=reads)) +
+    geom_histogram(bins=1000) +
+    xlim(1,2000) +
+    ylim(0, 1000) +
+    ggtitle(paste(my_sample, " distribution of non-zero reads"))
+  file <- paste("images/", my_sample, "_nz_distribution.pdf", sep="")
+  ggsave(here(file), pl)
+  png(here(paste("images/", my_sample, "_qq_plot.png", sep="")))
+  qqplot(y= nz_trunc$reads,
+         x=qgeom(ppoints(length(nz_trunc$reads)), 
+                 prob= 1/(mean(nz_trunc$reads))),
+         xlim = c(0, max(
+           qgeom(ppoints(length(nz_trunc$reads)), 
+               prob= 1/(mean(nz_trunc$reads))),
+           nz_trunc$reads )),
+         xlab = "Data Quantiles", 
+         ylab = "Theoretical Quantiles",
+         )
+  qqline(nz_trunc$reads, 
+        distribution = function(p) qgeom(p,
+                                    1/(mean(nz_trunc$reads))),
+       prob = c(0.25, 0.75), col = "red")
+  #abline(0,1, col="blue")
+  dev.off()
+}
+
+#combined dist and qq plots (sum reads)
+sum_nz_reads <- mtb_df1 %>% group_by(ta_coord) %>% summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>% filter(reads > 0)
+#truncate top 1% of reads
+sum_nz_trunc <- sum_nz_reads %>% mutate(rank = ntile(reads, 100)) %>% filter(rank != 100)
+
+ggplot(sum_nz_reads, aes(x=reads)) +
+    geom_histogram(bins=1000) +
+    xlim(1,2000) +
+    ylim(0, 1000) +
+    ggtitle("distribution of summed non-zero reads")
+ggsave(here("images/summed_nz_distribution_mtb.png"))
+png(here("images/summed_mtb_nz_qq_plot.png"))
+qqplot(y= sum_nz_trunc$reads,
+        x=qgeom(ppoints(length(sum_nz_trunc$reads)), 
+                 prob= 1/(mean(sum_nz_trunc$reads))), 
+        xlab = "Data Quantiles", 
+        ylab = "Theoretical Quantiles",
+       xlim = c(0, max(
+           qgeom(ppoints(length(sum_nz_trunc$reads)), 
+               prob= 1/(mean(sum_nz_trunc$reads))),
+           sum_nz_trunc$reads )),
+       )
+qqline(sum_nz_trunc$reads, 
+      distribution = function(p) qgeom(p,                                   1/(mean(sum_nz_trunc$reads))),
+       prob = c(0.25, 0.75), col = "red")
+dev.off()
+
+```
+
+Barplot with cumulative insertion density
+
+```{r cumul_insertion_density_mtb}
+library(tidyverse)
+library(here)
+
+mtb_df1 <- readRDS(here("R_data/mtb_invitro_insertions.RData"))
+nz_sites <- mtb_df1 %>% filter(reads != 0)
+
+mtb_22 <- nz_sites %>% filter(sample=="mtb22") %>% select(ta_coord) %>% pull()
+mtb_23 <- nz_sites %>% filter(sample=="mtb23") %>% select(ta_coord) %>% pull()
+
+#find total insertion density for each sample
+total_ta_mtb = 74604
+ins_den_22 <- length(mtb_22) / total_ta_mtb
+ins_den_23 <- length(mtb_23) / total_ta_mtb
+ins_den_tb <- tibble(sample=c("mtb_22", "mtb_23"), ins_density = c(ins_den_22, ins_den_23))
+
+#barplot of insertion density
+library(RColorBrewer)
+ggplot(ins_den_tb, aes(x=sample, y=ins_density, fill=sample)) +
+  geom_bar(stat="identity") +
+  scale_fill_brewer(palette = "Accent") +
+  ggtitle("Comparison of TA site saturation of Mtb samples") +
+  ylab("insertion density") +
+  theme(axis.title.x = element_blank(), axis.ticks.x = element_blank()) +
+  guides(fill="none")
+ggsave(here("images/Mtb_insertion_barplot.png"))
+#union of total sites
+tb_union <- union(mtb_22, mtb_23)
+#29919 total ta's hit
+length(tb_union)/total_ta_mtb
+# total 40% TA's hit in mtb
+
+#number of total reads with insertions in all reps/exp (union) vs number in common in all samples (intersect)
+int_ta <- intersect(mtb_22, mtb_23)
+#20543 in common (good correlation?)
+length(int_ta)/ length(tb_union)
+#69% in both
+
+#make df
+cumul_unique_tb <- tibble(
+  dataset=c("mtb_22", "mtb_23"),
+  len_tas = c(length(mtb_22), length(mtb_23)),
+  cum_tas = c(length(mtb_22), length(union(mtb_22, mtb_23))),
+  cum_ins_den = c(length(mtb_22)/total_ta_mtb, length(union(mtb_22, mtb_23))/total_ta_mtb))
+
+#cumul density
+ggplot(cumul_unique_tb, aes(x=dataset, y=len_tas, fill=dataset)) +
+  geom_bar(stat="identity") +
+  geom_line(aes(y=cum_tas), group=1) +
+  geom_point(aes(y=cum_tas), group=1) +
+  ylim(0,41000) +
+  scale_fill_brewer(palette = "Accent") +
+  ggtitle("Comparison of TA site saturation of Mtb samples") +
+  ylab("insertion density") +
+  theme(axis.title.x = element_blank(), axis.ticks.x = element_blank()) +
+  guides(fill="none") +
+  theme(axis.title.y = element_text(size = 12)) +
+  theme(axis.text.x = element_text(size=10))
+ggsave(here("images/mtb_cumul_density_barplot.png"))
+```
+
+Correlation between samples
+
+```{r correlation mtb}
+
+library(tidyverse)
+library(here)
+
+mtb_df1 <- readRDS(here("R_data/mtb_invitro_insertions.RData"))
+mtb_data <- pivot_wider(mtb_df1, names_from=sample, values_from = reads) 
+tb_mat <- as.matrix(mtb_data[,2:3])
+cor(tb_mat)
+#0.60 Pearson's correlation coefficient for 22 and 23
+cor.test(tb_mat[,1], tb_mat[,2], method = "pearson")
+#kendall corr coefficient 0.68
+```
+
+### plot of reads mapped vs unique ta sites
+
+```{r reads_v_saturation}
+library(tidyverse)
+data <- tibble(reads = c(4856314, 34035, 6057051, 1538393, 1210855), 
+               ta_sites = c(22539, 9692,36021,26828,23634), sample = c("Mb_19", "Mb_20", "Mb_21", "Mtb_22", "Mtb_23"), genome=c("Mbovis", "Mbovis", "Mbovis", "Mtb", "Mtb")) %>% group_by(genome)
+data$genome <- as.factor(data$genome)
+ggplot(data, aes(y=ta_sites, x=reads, label=sample)) +
+  geom_point(aes(color=genome)) +
+  geom_text(vjust=1) +
+  geom_smooth(method="lm", se=F) +
+  ylab("unique TA sites") +
+  xlab("reads mapped") 
+ggsave(here("images/reads_v_tasites.png"))
+
+mb <- data %>% filter(genome=="Mbovis")
+mtb <- data %>% filter(genome=="Mtb")
+cor.test(mtb$reads, mtb$ta_sites)
+
+```
+## Generate calculation of number of ORFs with insertions for TB and Bovis
+
+```{r number_orfs_insertions}
+library(here)
+library(tidyverse)
+
+# read in hmm file
+hmm_bovis <- read_tsv(here("in_vitro_data/hmm_bovis_new_add_19_21.wig"), skip=18, col_names = F)
+colnames(hmm_bovis) <- c("ta_site", "insertions", "ES", "GD", "NE", "GA", "call", "gene")
+#keep only first orf name
+hmm_bovis <- hmm_bovis %>%
+  mutate(gene = sub( "_.*" , "", gene))
+
+sum_insertions <- hmm_bovis %>% 
+  filter(grepl("MB", gene)) %>%
+  group_by(gene) %>%
+  summarise(tot_insertions = sum(insertions))
+total_genes <- nrow(sum_insertions)
+#3990
+
+nrow(sum_insertions %>% filter(tot_insertions > 0))
+#3625 with an insertion
+
+nrow(sum_insertions %>% filter(tot_insertions == 0))
+#365 with no insertions
+
+# calculate for TB
+hmm_tb <- read_tsv(here("in_vitro_data/hmm_mtb_new_add_22_23.wig"), skip=18, col_names = F)
+colnames(hmm_tb) <- c("ta_site", "insertions", "ES", "GD", "NE", "GA", "call", "gene")
+hmm_tb <- hmm_tb %>%
+  mutate(gene = sub( "_.*" , "", gene))
+
+sum_insertions_tb <- hmm_tb %>% 
+  filter(grepl("Rv", gene)) %>%
+  group_by(gene) %>%
+  summarise(tot_insertions = sum(insertions))
+
+nrow(sum_insertions_tb)
+#4019
+
+nrow(sum_insertions_tb %>% filter(tot_insertions > 0))
+#3554 with an insertion
+
+nrow(sum_insertions_tb %>% filter(tot_insertions == 0))
+#465 with no insertions
+
+```
+
+## Circos plots of genomes with insertions
+
+
+Make new bedfile from gff for tb
+
+```{bash}
+gff2bed < MtbH37RvNC_000962.3.gff > MtbH37RvNC_000962_3.bed
+
+```
+
+
+```{r circos_insertions_data_tb}
+install.packages("circlize")
+#setwd("~/Data")
+library(circlize)
+library(dplyr)
+
+tb.wig <- read.table(file=here("in_vitro_data/perm_add_22_23.wig"), header = FALSE, sep="\t", skip =2)
+tb_df <- cbind(tb.wig[,1],tb.wig) #adds extra column with dupl position for start and end
+head(tb_df)
+colnames(tb_df) <- c("start","end", "value")
+tb_df$logvalue <- log10((tb_df$value+0.01))
+quantile(tb_df[,3])
+tb_ymax.f <- quantile(tb_df[,3], probs=c(0.9))
+# replace max value in insertions by 90% quartile
+tb_df$value <- ifelse(tb_df$value>tb_ymax.f,tb_ymax.f,tb_df$value)
+quantile(tb_df[,3])
+tb_ymax.f
+
+#read in the genes from the bed file 
+beddata_tb<- read.delim(file=here("ref_seqs/MtbH37RvNC_000962_3.bed"), header=FALSE, sep="\t")
+colnames(beddata_tb)[1] <- "chr"
+head(beddata_tb)
+
+numgenes <- dim(subset(beddata_tb, beddata_tb[,3] < mtb_region.size))[1]
+numgenes   # number of genes in region
+endregion <- dim(subset(tb_df, tb_df[,2]< mtb_region.size))[1]
+endregion  # number of ta sites in region
+
+# make another track inside to label gaps in coverage (pos=0 for >100 conseq)
+#find gaps for tb
+#342082-351473 
+#799998-806159	 (6161) 
+#1446511-1453029	(6518) (argS, lysA, thrACB)
+#1471642-1476251	(4609) (ribosomal rna)
+#1552610-1561266 (8656) (pyrR,B,C,F,carA,B,Rv1382)
+##1646223-1652592	(6369) (various genes)
+#4238041-4245025
+start_tb<-c(342082,799998,1446511,1471642,1552610,1646223,4238041)
+end_tb<-c(351473,806159, 1453029, 1476251,1561266,1652592, 4245025)
+mid_tb<-(end_tb-start_tb)/2+start_tb
+name_tb<-c("a","b","c","d","e","f","g")
+gap_tb<-data.frame(start_tb, end_tb, name_tb)
+gap_tb
+```
+
+```{r circos_plot_tb}
+circos.clear()
+
+mtb_genome <- c("NC_000962.3")
+#mtb_region.size <- 10000  #test size
+mtb_region.size <- 4411532
+
+png("tb_circos.png", res=700, width=10, height=10, units="in")
+#tiff(here("in_vitro_data/images/tb_circos.tiff"),res=700, width=6, height=6, units="in", compression="lzw")
+#1) initialize circos plot
+circos.initialize(sectors=beddata_tb[1:numgenes,"chr"], xlim=c(0,mtb_region.size))
+#2) create plot sectors
+circos.trackPlotRegion(factors=beddata_tb[1:numgenes,"chr"], 
+                       ylim=c(0,300), 
+                       track.height = 0.3,
+                       panel.fun=function(x,y){
+                         circos.genomicLines(region=tb_df[1:endregion,1:2], 
+                                             value=tb_df[1:endregion,], 
+                                             numeric.column=3, 
+                                             type = "h",
+                                             col="green")
+                         
+circos.yaxis(labels.cex=0.5)
+circos.xaxis(labels.cex=0.5)
+                       })
+#3) make axis of genome nt                      
+circos.genomicAxis(
+  h = "top",
+  major.at = NULL,
+  labels = NULL,
+  major.by = NULL,
+  tickLabelsStartFromZero = TRUE,
+  labels.cex = par("cex"),
+  sector.index = get.current.sector.index(),
+  track.index = get.current.track.index())
+#4) plot rectangles where gaps in coverage exceed 100 TA sites
+circos.genomicTrackPlotRegion(beddata_tb[1:numgenes,], ylim=c(0,1), track.height= 0.1,
+                              panel.fun=function(x,y, ...){
+                                chr = get.cell.meta.data("sector.index")
+                                xlim1 = gap_tb[,1]
+                                xlim2 = gap_tb[,2]
+                                ylim = get.cell.meta.data("ylim")
+                                circos.rect(xlim1, 0, xlim2, 0.9, col="gray")
+                                circos.text(mid_tb, -0.5, name_tb, niceFacing=T, cex=0.75)
+                              }
+)
+dev.off()
+
+```
+
+## Compare essential genes in two genomes
+
+```{r comparing_orthologs_new_tables}
+library(dplyr)
+# bovis transit results for samples 19 and 21 added together
+hmm_results<-read.delim(here("in_vitro_data/hmm_bovis_new_add_19_21_genes.wig"), 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+# change to just gene and call--will affect downstream plots
+bovis_hmm <- select(hmm_results, 2, 1, 11)
+colnames(bovis_hmm) <- c("gene","ORF", "call")
+#match ORF format to orthologs ('Mb' vs 'MB')
+bovis_hmm$ORF<- sub('MB', 'Mb', bovis_hmm$ORF)
+nrow(bovis_hmm)
+#4045 (same as lines in prot_table)
+#num of cds
+nrow(bovis_hmm %>% filter(grepl("Mb", ORF)))
+#3998
+
+#tb transit results for samples 22 and 23 added together
+mtb_results<-read.delim(here("in_vitro_data/hmm_mtb_new_add_22_23_genes.wig"), 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+# change to just gene and call--will affect downstream plots
+mtb_hmm <- select(mtb_results, 2, 1, 11)
+colnames(mtb_hmm) <- c("gene","ORF", "call")
+nrow(mtb_hmm)
+#4074 
+#num of CDS
+#4031
+nrow(mtb_hmm %>% filter(grepl("Rv", ORF)))
+# create dataframe with orthologs and calls from each
+# unique gene pairs tb/bovis
+malone_df<-read.delim("~/tn_seq/data/Malone_orthologs.csv", sep=",", header=FALSE, stringsAsFactors=F, skip=3)
+orthologs<-select(malone_df, 2,3,4, 11)
+colnames(orthologs)<-c("TB_orf", "Bovis_orf", "gene", "i/v")
+orf_pairs<-paste(orthologs$TB_orf, orthologs$Bovis_orf, "/")
+length(orf_pairs) #3999
+orf_pairs<-unique(orf_pairs)
+length(orf_pairs) #3999
+# all pairs are unique
+
+#but some orfs will be in twice
+orthologs %>% group_by(Bovis_orf) %>% summarise(count=n()) %>% filter(count >1)
+#36 bovis orfs in >1 pair with tb orf
+orthologs %>% group_by(TB_orf) %>% summarise(count=n()) %>% filter(count >1)
+#64 tb orfs in >1 pair with bovis orf
+
+# make dataframe using orfs from orthologs and then look up calls. this will have some orfs listed twice, but in different pairs.
+
+#join with df of tb genes to get functional categories
+
+# make table with orf names, calls in bovis and mtb
+comp_calls<-as.data.frame(matrix(0, nrow = nrow(orthologs), ncol = 7))
+colnames(comp_calls)<-c("bovis_orf", "bovis_call", "tb_orf", "tb_call", "gene", "v/i", "func_cat")
+
+comp_calls$bovis_orf  <- orthologs$Bovis_orf
+comp_calls$tb_orf     <- orthologs$TB_orf
+comp_calls$gene       <- orthologs$gene
+comp_calls$`v/i`      <- orthologs$`i/v`
+comp_calls$func_cat   <- orthologs$func_cat
+#View(comp_calls)
+
+for (i in 1:nrow(comp_calls)){
+  if (comp_calls$bovis_orf[i] %in% bovis_hmm$ORF){
+    comp_calls$bovis_call[i] <- bovis_hmm[which(bovis_hmm$ORF ==
+                                                  comp_calls$bovis_orf[i]),3]
+  }else{
+    # 0 if gene is not in bovis_hmm
+    comp_calls$bovis_call[i] <- 0
+    }
+  if (comp_calls$tb_orf[i] %in% mtb_hmm$ORF){
+    comp_calls$tb_call[i] <- mtb_hmm[which(mtb_hmm$ORF == comp_calls$tb_orf[i]),3]
+  }else{
+    # 0 if gene is not in tb_hmm
+    comp_calls$tb_call[i] <- 0
+    }
+}
+nrow(comp_calls)
+#3999
+
+# how many orthologs not found in tb genome
+missing_tb<- comp_calls[comp_calls$tb_call==0,]
+nrow(missing_tb)
+#0 
+missing_bovis <- comp_calls[comp_calls$bovis_call==0,]
+nrow(missing_bovis)
+#1
+#2300   MB2495A          0 Rv2468A      NE    0 Identical
+# not sure why this is missing--it is in results? not sure why orf still is 'MB', changing manually
+comp_calls$bovis_call[2300]<- "NE"
+comp_calls$bovis_orf[2300]<-"Mb2495A"
+sorted_comp_calls<-comp_calls[order(comp_calls$bovis_orf),]
+# change missing gene names to blank
+sorted_comp_calls$gene[sorted_comp_calls$gene == 0] <- c(" ")
+#View(sorted_comp_calls)
+#save file
+saveRDS(sorted_comp_calls, here("in_vitro_data/R_data/sorted_comp_calls_19_10_23.RData"))
+
+# how many 'N/A'? (these are genes where no call could be made by HMM)
+na<-comp_calls[comp_calls$bovis_call=="N/A",]
+nrow(na) #6
+na_tb<-comp_calls[comp_calls$tb_call=="N/A",]
+nrow(na_tb)
+#5
+```
+
+Malone data:  'identical' is equal amino acid length and conserved amino acid composition, variable includes truncations and N-S SNPs.
+
+For comparing essentiality, need to eliminate truncated genes or compare similar lengths/amino acid compositions. Theoretically can compare identical as is, though the gffs are not equivalent for some genes.
+
+See notes below in resampling:
+
+For example for Rv3487c/Mb3517c which are 'identical' in Malone study but show 297bp difference in length:
+
+>Mb3517c, lipF, len: 376 aa. Equivalent to esterase/lipase lipF from Mycobacterium bovis BCG strain Korea 1168P (100% identity with 375 aa overlap). 5' extension to annotation based on de novo proteomics of Mycobacterium tuberculosis strain H37Rv under exponential conditions.
+
+165 of the orthologous genes have different lengths (and presumably numbers of TA sites) including 19 'identical' ORFs
+
+Look at orthologous genes list made by aligning genomes using Mauve. this uses Mtb H37 genes as benchmark and aligns other genome regions to this. Will have to go back and reference mbovis gff to identify what mbovis orf this aligns to, but lengths will all be the same? Makes sense since mtb genome smaller.
+
+Mauve generates an ortholog file which 'lists groups of annotated and unannotated genes that are predicted to be *positionally orthologous* by whole-genome multiple alignment'
+
+Mauve indicates some genes have different lengths that appear to have the same length when I blastn them against each other. This is because blast will show the maximimum matched area. Reciprocal blast can show which portion of gene is aligned.
+
+Also, sometimes the bovis annotation is wrong. ACC to mycobrowser, Rv3545c/Mb3575c are identical with 1302nt and 433 aa (I know, maths). But acc to annotation, Mb3575
+
+LT708304.1	feature	CDS	3931772	3933073	.	-	0	codon_start=1;db_xref=GOA:P63710,InterPro:IPR001128,InterPro:IPR002397,UniProtKB/Swiss-Prot:P63710;gene=cyp125;locus_tag=BQ2027_MB3575c;note=Mb3575c%2C cyp125%2C len: 433 aa. Equivalent to Rv3545c%2C len: 433 aa%2C from Mycobacterium tuberculosis strain H37Rv%2C %28100.0%25 identity in 433 aa overlap%29. Probable cyp125%2C cytochrome P-450 %28EC 1.14.-.-%29%2C similar to others e.g. Q59723%7CLINC%7CCYP111 from Pseudomonas incognita %28406 aa%29%2C FASTA scores: opt: 831%2C E%28%29: 8e-45%2C %2834.75%25 identity in 406 aa overlap%29%3B Q9X8Q3%7CCYP107P1%7CSCH10.14c from Streptomyces coelicolor %28411 aa%29%2C FASTA scores: opt: 694%2C E%28%29: 3.3e-36%2C %2832.35%25 identity in 417 aa overlap%29%3B Q9L465%7CCYP162A1%7CNIKQ from Streptomyces tendae %28396 aa%29 FASTA scores: opt: 664%2C E%28%29: 2.5e-34%2C %2834.15%25 identity in 413 aa overlap%29%3B O08469%7CCPXY_BACSU%7CCYPA%7CCYP107J1 from Bacillus subtilis %28410 aa%29%2C FASTA scores: opt: 579%2C E%28%29: 5.6e-29%2C %2830.05%25 identity in 366 aa overlap%29%3B etc. Also similar to other from Mycobacterium tuberculosis e.g. Q50696%7CCYP124%7CRv2266%7CMT2328%7CMTCY339.44c %28428 aa%29 FASTA scores: opt: 1040%2C E%28%29: 6.1e-58%2C %2840.75%25 identity in 432 aa overlap%29. BELONGS TO THE CYTOCHROME P450 FAMILY. Protein product from Mb3575c detected using shotgun mass spectrometry and SWATH mass spectrometry. Mb3575c found to be expressed during exponential growth in Sauton%27s minimal media by RNA-sequencing.;product=PROBABLE CYTOCHROME P450 125 CYP125;protein_id=SIU02202.1;transl_table=11;translation=MSWNHQSVEIAVRRTTVPSPNLPPGFDFTDPAIYAERLPVAEFAELRSAAPIWWNGQDPGKGGGFHDGGFWAITKLNDVKEISRHSDVFSSYENGVIPRFKNDIAREDIEVQRFVMLNMDAPHHTRLRKIISRGFTPRAVGRLHDELQERAQKIAAEAAAAGSGDFVEQVSCELPLQAIAGLLGVPQEDRGKLFHWSNEMTGNEDPEYAHIDPKASSAELIGYAMKMAEEKAKNPADDIVTQLIQADIDGEKLSDDEFGFFVVMLAVAGNETTRNSITQGMMAFAEHPDQWELYKKVRPETAADEIVRWATPVTAFQRTALRDYELSGVQIKKGQRVVMFYRSANFDEEVFQDPFTFNILRNPNPHVGFGGTGAHYCIGANLARMTINLIFNAVADHMPDLKPISAPERLRSGWLNGIKHWQVDYTGRCPVAH
+
+
+
+```{r aligned orthologous}
+library(dplyr)
+library(GenomicRanges)
+library(plyranges)
+library(genbankr)
+library(rtracklayer)
+
+#mauve file
+align <- read_tsv("~/myco_projects/mauve/bovis_tb_orthologs", show_col_types = F, col_names = F)
+#3744
+colnames(align) <- c("Bovis_locus","Tuberculosis_locus")
+# remove all the '[0-9]:' from start of each column (col number?)
+align <- align %>% mutate(Tuberculosis_locus = sub("[0-9]:", "", Tuberculosis_locus)) %>% mutate(Bovis_locus = sub("[0-9]:", "", Bovis_locus))
+
+#extract tb orf and coordinates from columns
+align <- align %>% separate(Tuberculosis_locus, c("tb_orf", "tb_start", "tb_end")) %>% separate(Bovis_locus, c("extra", "bovis_index", "bovis_start", "bovis_end")) %>% select(-c(extra))
+
+align <- align %>% mutate_at(c("tb_start", "tb_end", "bovis_start", "bovis_end"), as.numeric)
+#only actual TB orfs
+align <- align %>% filter(grepl("Rv", tb_orf))
+#add in lengths of genes
+align <- align %>% mutate(tb_len = tb_end - tb_start +1) %>% mutate(bovis_len = bovis_end - bovis_start +1)
+#all lengths equal?
+align[align$tb_len != align$bovis_len,]
+#520 unequal
+nrow(align[abs(align$tb_len - align$bovis_len) >10,])
+#417 > 10 bp difference in length (same as javier's)
+
+#put in bovis orf name (replace locus tag with 'old' locus tag from genbank)
+
+#read genbank file
+bovis_gb <- readGenBank(here("ref_seqs/Mbovis_AF2122.97_newest.gb"), verbose=F)
+bovis_genes <- as_tibble(genes(bovis_gb) %>% select(locus_tag, old_locus_tag))
+#remove non-cds
+bovis_genes <- bovis_genes %>% filter(grepl("MB", old_locus_tag))
+#bovis_genes$old_locus_tag <- unlist(bovis_genes$old_locus_tag)
+bovis_orf_code <- bovis_genes %>% select(locus_tag, old_locus_tag)
+bovis_orf_code$locus_tag <- sub("BQ2027_", "", bovis_orf_code$locus_tag)
+bovis_orf_code$old_locus_tag <- sub("BQ2027_", "", bovis_orf_code$old_locus_tag)
+
+align_orfs <- left_join(align, bovis_orf_code, by=c("bovis_index" = "locus_tag")) %>% arrange(tb_orf)
+#3744 (3 more)
+align_orfs <- align_orfs %>% mutate(diff_len = abs(tb_len-bovis_len))
+#3744
+
+#filtered for genes that have <10 bp different in lengths (just filter for TA sites later)
+# ortho_align_genes <- 
+#   align_orfs %>% 
+#   mutate(diff_len = abs(tb_len-bovis_len)) %>% 
+#   filter(diff_len < 10)
+#3326
+#fix mb orf col
+align_orfs$old_locus_tag <- sub("MB", "Mb", align_orfs$old_locus_tag)
+align_orfs$old_locus_tag <- sub("C", "c", align_orfs$old_locus_tag)
+
+#how many have no old tag?
+align_orfs %>% filter(is.na(old_locus_tag))
+#76
+
+#find gene orthologs in gff
+bovis_gff <- readGFF("~/myco_projects/ref_seqs/Mbovis/Mycobacterium_bovis_AF2122-97_gff_v4.gff")
+bovis_gff <- as_tibble(bovis_gff) %>% filter(type=="CDS") %>% select(Locus, Name, Comments)
+bovis_gff <- bovis_gff %>% 
+  mutate(ortholog = map_chr(Comments, 3)) %>% 
+  select(-c(Comments))
+#extract Rv if present 
+bovis_gff <- bovis_gff %>% mutate(tb_ortholog = str_extract(ortholog, "Rv\\w+"))
+
+oag_join <- left_join(align_orfs, bovis_gff, by = c("tb_orf" = "tb_ortholog")) %>% arrange(tb_orf)
+
+#merge old_locus and Locus columns for bovis_orf
+nrow(oag_join %>% filter(is.na(oag_join$Locus)==T))
+#58
+nrow(oag_join %>% filter(is.na(oag_join$old_locus_tag)==T))
+#104
+
+#prioritises Locus (from gff) vs 'old_locus_tag' from genbank
+merged_oag <- oag_join %>% mutate(bovis_orf = coalesce(Locus, old_locus_tag))
+nrow(merged_oag %>% filter(is.na(bovis_orf)==T))
+#2
+
+#concatenate and then take first
+#test<- oag_join %>% 
+#  mutate(Locus = replace(Locus, is.na(Locus)==T, old_locus_tag[is.na(Locus)==T])) 
+#nrow(test %>% filter(is.na(Locus)))
+#2
+# fixing some missing bovis orfs
+# test %>% filter(tb_orf=="Rv3349c")
+# test <- test %>% mutate(Locus = replace(Locus, tb_orf=="Rv3349c", "Mb3382c"))
+# 
+# test %>% filter(tb_orf=="Rv0277A") 
+# #vapB25 but no orf assigned--no call made in bovis or tb
+# #test <- test %>% mutate(Locus = replace(Locus, tb_orf=="Rv0277A", "Mbxxxx")) %>%
+# #  mutate(Name = replace(Name, tb_orf=="Rv0277A", "vapB25"))
+# test <- test %>% filter(tb_orf != "Rv0277A")
+# 
+# test %>% filter(tb_orf=="Rv0925c")
+# #100% identity in 428 aa overlap to Mb0948c, but my alignment shows length of 728,
+# #too different in length, remove
+# test <- test %>% filter(tb_orf!="Rv0925c")
+# 
+
+#remove old_locus_tag and Locus (have been merged with bovis_orf)
+oag_final <- merged_oag %>% select(-c(old_locus_tag, Locus))
+#3806
+
+#number of duplicate gene pairs = number of duplicate tb_orfs
+tb_dups <- oag_final %>% dplyr::count(tb_orf)
+nrow(tb_dups %>% filter(n>1))
+#59
+oag_dups <- left_join(oag_final, tb_dups, by="tb_orf") %>% dplyr::rename("tb_n"= "n")
+nrow(oag_dups)
+#3806
+
+#filter for unique pairs
+oag_pairs <- 
+  oag_final %>% 
+  mutate(pairs = paste(bovis_index, tb_orf, sep="_")) %>% 
+  distinct(pairs, .keep_all = T)
+#3744
+
+ortho_align_final <- oag_pairs %>% arrange(tb_orf)
+
+saveRDS(ortho_align_final, here("in_vitro_data/R_data/filtered_ortho_align_genes.RData"))
+
+# #read in bovis gff
+# bovis_granges<-import("~/myco_projects/ref_seqs/Mbovis/LT708304_updated_aug19.gff")
+# bovis_granges <- bovis_granges %>% filter(type=="gene") %>%
+#   select(gene,locus_tag)
+# #make granges with bovis coordinates and Rv names
+# align_granges <- GRanges(seqnames = "LT708304.1",
+#                          ranges = IRanges(start = align$bovis_start,
+#                                           end = align$bovis_end,
+#                                           width = align$bovis_len,
+#                                           names = align$tb_orf),
+#                          )
+# 
+# res_pairs <- findOverlapPairs(align_granges, bovis_granges)
+# 
+# res <- findOverlaps(align_granges, bovis_granges)
+# View(as_tibble(bovis_granges[subjectHits(res)]))
+# align_granges[queryHits(res)]
+# 
+# bovis_df<-as.data.frame(bovis_granges)
+# my_types <- c('CDS', 'tRNA')
+# #colnames(bovis_df)
+# my_cols <- c(2:5,6,7, 24, 25)
+# bovis_genes <- bovis_df[which(bovis_df$type %in% my_types),my_cols]
+# bovis_genes <- bovis_genes %>% separate(locus_tag, c("extra", "locus_tag"), sep="_") %>% select(-c(extra))
+
+```
+
+menB/Rv0548 is in ortho_align_final. has same length as bovis ortholog Mb0562 acc to blast but different in mauve alignment
+
+Run a reciprocal blast with bovis and tb coding gene sequences. See myco_align.ipynb
+
+Need to do with better fasta sequences files derived from annotation maybe? the one downloaded from ncbi is out of date maybe?
+
+retrieved a different assembly (9-11-23). need to re-run.
+
+The ref-seq is different from AF2122/97
+
+
+```{r create_ortholog_list}
+library(dplyr)
+library(genbankr)
+library(plyranges)
+
+#read in reciprocal blast results (latest 10-11-23)
+blast_res <- read_delim(here("in_vitro_data/ortholog_search/bovis_hits_to_tb_blastn.out"), delim="\t", show_col_types = F, col_names = F)
+colnames(blast_res) <- c("qseqid", "sseqid", "pident", "length", "mismatch", "gapopen", "qstart", "qend", "qlen", "sstart", "send", "slen")
+
+#remove the chromosome name from qseqid and sseqid and just leave gene locus
+blast_res$qseqid <- sub("LT708304.1_", "", blast_res$qseqid)
+blast_res$sseqid <- sub("NC_000962.3_", "", blast_res$sseqid)
+
+#put in bovis orf name (replace locus tag with 'old' locus tag from genbank)
+#read in genbank file
+# bovis_gb <- readGenBank(here("ref_seqs/Mbovis_AF2122.97_newest.gb"), verbose=F, partial=TRUE)
+# bovis_genes <- as_tibble(genes(bovis_gb) )
+# #this not included in parsed gene bank file unless include partial
+# bovis_genes %>% filter(locus_tag=="BQ2027_RS00505")
+
+#find genes that are missing old locus tag
+
+#remove non-cds (this also removes rows with no old locus tag)
+#bovis_genes <- bovis_genes %>% filter(grepl("MB", old_locus_tag))
+#bovis_genes$old_locus_tag <- unlist(bovis_genes$old_locus_tag)
+#bovis_orf_code <- bovis_genes %>% select(start, end, width, locus_tag, old_locus_tag, gene, pseudo)
+nrow(blast_res)
+#4840
+# bovis_orf_code$locus_tag <- sub("BQ2027_", "", bovis_orf_code$locus_tag)
+# bovis_orf_code$old_locus_tag <- sub("BQ2027_", "", bovis_orf_code$old_locus_tag)
+# #bovis_orf_code$old_locus_tag <- sub("MB", "Mb", bovis_orf_code$old_locus_tag)
+# blast_res_orfs <- left_join(blast_res, bovis_orf_code, by=c("qseqid" = "locus_tag"))
+# blast_res_orfs <- blast_res_orfs %>% dplyr::rename("bovis_orf" = "old_locus_tag") %>% relocate(bovis_orf, .before = qseqid)
+# blast_res_orfs <- blast_res_orfs %>% relocate(gene, .after = bovis_orf)
+
+# # change 'C' to 'c' for genes on lagging strand
+blast_res$qseqid <- sub('C', 'c', blast_res$qseqid)
+
+# #this now includes coordinates from genbank for the new locus names
+# nrow(blast_res_orfs)
+# #4811
+# nrow(blast_res_orfs %>% filter(is.na(bovis_orf)))
+# #0
+#some values for bovis_orf are character(0)
+#nrow(blast_res_orfs %>% filter(bovis_orf=="character(0)"))
+#199
+#blast_res_orfs <- blast_res_orfs %>% 
+#  mutate(bovis_orf = replace(bovis_orf, 
+#                             bovis_orf=="character(0)",
+#                             blast_res_orfs$qseqid[bovis_orf=="character(0)"]))
+#blast_res_orfs %>% filter(qseqid=="RS00355")
+
+#are there missing bovis orf names? or tb names? 
+blast_res %>% filter(is.na(sseqid))
+
+#add in coordinates from gff
+bovis_gr <- read_gff3(here("ref_seqs/LT708304_updated_aug19.gff")) %>% filter(type=="gene") %>% select(locus_tag, gene)
+bovis_gff <- as_tibble(bovis_gr) %>% select(start, end, width, locus_tag, gene)
+bovis_gff$locus_tag <- sub("BQ2027_", "", bovis_gff$locus_tag)
+# #join with blast res
+blast_res_bovis <- left_join(blast_res, bovis_gff, by=c("qseqid" = "locus_tag"))
+blast_res_bovis <- blast_res_bovis %>% dplyr::rename("bovis_orf" = "qseqid","tb_orf" = "sseqid", "bovis_start" = "start", "bovis_end" = "end", "bovis_width" = "width")
+nrow(blast_res_bovis)
+
+# nrow(blast_res_bovis %>% filter(is.na(bovis_orf)))
+#blast_res_bovis <- blast_res_bovis %>%
+#mutate(bovis_orf = coalesce(bovis_orf,locus_tag))
+
+#add in tb coordinates
+tb_gr <- read_gff3(here("ref_seqs/MtbH37RvNC_000962.3.gff")) %>% filter(type=="gene") %>% select(locus_tag)
+tb_gff <- as_tibble(tb_gr) %>% select(start, end, width, locus_tag)
+blast_res_join <- left_join(blast_res_bovis, tb_gff, by=c("tb_orf" = "locus_tag"))
+blast_res_join <- blast_res_join %>% dplyr::rename("tb_start" = "start", "tb_end" = "end", "tb_width" = "width")
+nrow(blast_res_join)
+
+#remove bovis pseudogenes (maybe not if they are orthologous?)
+#nrow(blast_res_join %>% filter(pseudo==TRUE))
+#366
+#blast_res_join <- blast_res_join %>% filter(pseudo==FALSE) %>% select(-c(pseudo))
+
+#add in column for difference in annotated gene length
+blast_res_complete <- blast_res_join %>% mutate(diff_gene_len = abs(bovis_width - tb_width))
+#add column to indicate snps (identical/variable)
+blast_res_complete <- blast_res_complete %>% mutate(snps = ifelse(mismatch > 0 | gapopen >0, "variable", "identical"))
+#add column to show diff length of alignment to gene length for mb and mtb
+blast_res_complete <- blast_res_complete %>% mutate(diff_align.mb = bovis_width - length) %>% mutate(diff_align.tb = tb_width - length)
+
+saveRDS(blast_res_complete, here("in_vitro_data/R_data/complete_blast_results.RData"))
+
+```
+
+we can filter for matches with:
+
+1) high number of mismatches 
+2) variation in match lengths from length of genes 
+3) different length mbovis vs mtb
+4) multiple matches
+
+what is the distribution of mismatches? some genes (PPE) have lots of matches in reciprocal blast, want to select best/longest one
+
+slen is length of subject sequence in database (tb). This will always = the match 'length'.
+qlen is the length of query sequence in fasta. This is coming from hits on tb to mbovis db (so bovis sequence matches). This will not necessarily match the length of the new match ('length).
+
+
+first make a list of strict orthologs that are within limits of length of gene and number of mismatches. will check all for same number of TA sites and filter again.
+
+```{r filter_results_similarity}
+library(dplyr)
+library(ggplot2)
+
+blast_res_complete <- readRDS(here("in_vitro_data/R_data/complete_blast_results.RData"))
+
+ggplot(blast_res_complete, aes(x=mismatch)) +
+  stat_ecdf() +
+  xlim(0,50)
+  #10 as cuttoff?
+
+#of genes that only appear once
+singles <- blast_res_complete %>% group_by(tb_orf) %>% dplyr::count(bovis_orf) %>% filter(n < 2)
+nrow(singles)
+#3778 query singles for either way
+
+ggplot(blast_res_complete %>% filter(tb_orf %in% singles$tb_orf), aes(x=mismatch)) +
+  stat_ecdf() +
+  xlim(0,25)
+
+#looks like 4-5 mismatches is good cutoff for those that only match once
+# don't filter for mismatches--will look at number of ta sites and then rule out 
+res_match_filter <- blast_res_complete %>% filter(mismatch < 5)
+nrow(res_match_filter)
+#4272
+#how many multiple parts matching
+nrow(res_match_filter %>% group_by(bovis_orf) %>% dplyr::count(tb_orf) %>% filter(n > 2))
+# 29 
+
+#filter out genes that only have a small part aligning with either of the genomes (short matches) may want to use these short matches for resampling prot table
+#res_filter_lens <- res_match_filter %>% filter( `length` > 0.95*width.mb & `length` >0.95*width.tb)
+#res_filter_lens <- res_match_filter %>% filter( diff_align.mb < 10 & diff_align.tb<10)
+
+#compare match to length of tb only--can then filter if difference in ta sites
+res_filter_lens <- blast_res_complete %>% filter(diff_align.tb<10)
+nrow(res_filter_lens)
+#3672 with less than 10 bp diff between length of match and both annot genes
+
+#max mismatch after len filtering
+max(res_filter_lens$mismatch)
+#52
+#num identical genes
+nrow(res_filter_lens %>% filter(snps=="identical"))
+#2361 (got more identical genes with correct annotation 10-11-23)
+
+#where annotated genes are very close in length (<10 different) --save this for resampling later
+#res_filter_same <- res_filter_lens %>% filter(diff_gene_len < 10)
+#3576
+
+#check for duplicates
+nrow(res_filter_lens %>% 
+  group_by_all() %>%
+  filter(dplyr::n()>1) %>%
+  ungroup())
+#27
+#remove dupls
+res_filter_nodups <- res_filter_lens %>% distinct()
+#3657
+bovis_dups <- res_filter_nodups %>% group_by(bovis_orf) %>% filter(dplyr::n()>1) %>% arrange(bovis_orf)
+#46
+#most are unique pairings (ie one bovis gene for two--split up--tb genes) but need to eliminate those with two alignments to same gene, take lowest mismatches and highest match length
+
+#res_filter_nodups <- res_filter_nodups %>% 
+  
+#bovis_dups %>%
+#  arrange(bovis_orf, -length) %>%
+ # filter(!duplicated(res_filter_nodups[,c("bovis_orf", "tb_orf")]))
+
+res_filter_nodups %>% group_by(tb_orf) %>% filter(dplyr::n()>1) %>% arrange(tb_orf)
+#12 these are duplicates--some of same pair
+
+# #choose those with longest match and pident to get only one pairing for each
+#but this will lose the double-mapped genes
+res_filter_longest <- res_filter_nodups %>% group_by(bovis_orf) %>% filter(pident==max(pident)) %>% filter(length==max(length))
+res_filter_longest %>% group_by(bovis_orf) %>% filter(dplyr::n()>1)
+#still have one match but it isn't a very good one (over 30 mismatches, PPE57)
+
+#these are tb genes that map to more than one bovis gene (get rid of two unique pairings) they are ties
+res_filter_longest <- res_filter_longest %>% group_by(tb_orf) %>% filter(pident==max(pident)) %>% filter(length==max(length))
+res_filter_longest %>% group_by(tb_orf) %>% filter(dplyr::n()>1) 
+#still have same match above (with 30 mismatches, PPE57)
+
+#how many identical
+nrow(res_filter_longest %>% filter(snps=="identical"))
+#2341
+nrow(res_filter_nodups %>% filter(snps=="variable"))
+#1307
+
+#take only distinct bovis/tb orf pairings
+res_filter_nodups <- res_filter_nodups %>% distinct(bovis_orf, tb_orf, .keep_all = T)
+nrow(res_filter_nodups)
+#3653
+
+saveRDS(res_filter_nodups, here("in_vitro_data/R_data/blast_filtered_orthologs_unique_pairs.RData"))
+
+```
+Rv0515 pairs to both Mb0343 and Mb0528 with 100% identity but one matches only 1510 of 1512 (Mb03434) and one is entire length of 1512 (Mb0528)
+
+This is a 'repeat protein' which is nearly identical to another tb protein ('Almost identical to Rv0336 (99.8% identity in 503 aa overlap)'). The ortholog is Mb0528. This is where positional orthologs might be better?
+
+esxJ/Rv1038c matches to both Mb1067c (297 with 100% identity) and Mb1229 (295 with one mismatch). Rv1038c is 297
+
+This is an ESAT-6 protein and very similar to other in this family. 'almost identical to Rv1197, Rv1792, Rv2347c and Rv3620c'. Mb1067c is the ortholog.
+
+This currently saves all unique pairings but there are repeats where there are two tb genes orthologous for one mbovis and vice versa
+
+Check for number of TA sites in each sequence of orthologs. installed seqinr library
+
+```{r verify_ta_numbers_blast}
+library(dplyr)
+library(seqinr)
+library(Biostrings)
+
+orthologs <- readRDS(here("in_vitro_data/R_data/blast_filtered_orthologs_unique_pairs.RData")) %>% select(bovis_orf, gene, tb_orf, bovis_start, bovis_end, tb_start, tb_end, diff_gene_len, snps)
+nrow(orthologs)
+#3653
+
+#read in fastas for tb and bovis
+tb_fasta <- read.fasta(file = here("ref_seqs/Mtb_H37Rv.fasta"))
+tb_seq <- tb_fasta[[1]]
+length(tb_seq) #4411532
+bovis_fasta <- read.fasta(file = here("ref_seqs/Mbovis_AF2122_97.fasta"))
+bovis_seq <- bovis_fasta[[1]]
+length(bovis_seq) #4349904
+
+#add seqs to of all sequences
+ortho_seqs <- orthologs %>% 
+  rowwise() %>%  #for some reason this was required when I repeated?
+  mutate(tb_seqs = paste(tb_seq[tb_start:tb_end], collapse = "")) %>%
+  mutate(bovis_seqs = paste(bovis_seq[bovis_start:bovis_end], collapse=""))
+
+#write_lines(ortho_seqs %>% filter(gene=="lipF") %>% select(bovis_seqs) %>% pull(), file=here("in_vitro_data/ortholog_search/bovis_lipF_seq.txt"))
+
+# count number of tas in each seq (takes a minute)
+ortho_ta <- ortho_seqs %>% 
+  mutate(tb_tas = length(matchPattern("TA", DNAString(tb_seqs)))) %>%
+  mutate(bovis_tas = length(matchPattern("TA", DNAString(bovis_seqs))))
+
+ortho_ta %>% filter(tb_orf=="Rv3487c") %>% select(bovis_orf, tb_orf, tb_tas, bovis_tas)  
+#23 v  15 TA sites
+
+#how many with diff number of tas?
+nrow(ortho_ta %>% filter(tb_tas != bovis_tas))
+#288
+nrow(ortho_ta %>% filter(abs(tb_tas-bovis_tas) >2))
+# 52 with more than 2 difference in TAs
+
+#filter out genes with more than one TA site difference
+ortho_ta_flt <- ortho_ta %>% filter(abs(tb_tas-bovis_tas) < 2)
+#3585
+
+#remove sequences 
+ortho_ta_flt <- ortho_ta_flt %>% select(-c(tb_seqs, bovis_seqs))
+
+saveRDS(ortho_ta_flt, here("in_vitro_data/R_data/blast_orthologs_same_tas.RData"))
+
+```
+
+Calculate number of TAs in the positional orthologs (this is using different assembly for bovis--will need to re-do with correct sequence if want to include positional orthologs)
+
+```{r verify_ta_numbers_positional}
+
+#don't run
+
+
+library(dplyr)
+library(seqinr)
+library(Biostrings)
+
+orthologs <- readRDS(here("in_vitro_data/R_data/filtered_ortho_align_genes.RData"))
+#3744
+#read in fastas for tb and bovis
+tb_fasta <- read.fasta(file = here("ref_seqs/Mtb_H37Rv.fasta"))
+tb_seq <- tb_fasta[[1]]
+length(tb_seq) #4411532
+bovis_fasta <- read.fasta(file = here("ref_seqs/Mbovis_AF2122_97.fasta"))
+bovis_seq <- bovis_fasta[[1]]
+length(bovis_seq) #4349904
+
+#gene <- DNAString(paste(tb_seq[orthologs$tb_start:orthologs$tb_end], collapse=""))
+#length(gene)
+#res <- matchPattern("TA", gene)
+#length(res)
+
+#add seqs to of all sequences
+ortho_seqs <- orthologs %>% 
+  rowwise() %>%  #for some reason this was required when I repeated?
+  mutate(tb_seqs = paste(tb_seq[tb_start:tb_end], collapse = "")) %>%
+  mutate(bovis_seqs = paste(bovis_seq[bovis_start:bovis_end], collapse=""))
+# count number of tas in each seq
+ortho_ta <- ortho_seqs %>% 
+  mutate(tb_tas = length(matchPattern("TA", DNAString(tb_seqs)))) %>%
+  mutate(bovis_tas = length(matchPattern("TA", DNAString(bovis_seqs))))
+
+
+ortho_ta %>% filter(tb_orf=="Rv0555") # both show 15 TA sites
+
+#how many with diff number of tas?
+nrow(ortho_ta %>% filter(tb_tas != bovis_tas))
+#208 (fewer than different lengths)
+#how many different than 1
+nrow(ortho_ta %>% filter(abs(tb_tas-bovis_tas) >1))
+# only 7 differ in more than one TA, these all differ by 2 TA sites but have same length (or differ by 1 bp)
+
+#filter out genes with more than one TA site difference
+ortho_ta_flt <- ortho_ta %>% filter(abs(tb_tas-bovis_tas) < 2)
+#3317
+
+#remove sequences and add in hmm results and i/v from malone to see if calls are changed
+ortho_ta_flt <- ortho_ta_flt %>% select(-c(tb_seqs, bovis_seqs))
+
+comp_data <- readRDS(here("in_vitro_data/R_data/sorted_comp_calls_19_10_23.RData"))
+
+ortho_res <- left_join(ortho_ta_flt, comp_data, by=("bovis_orf"), multiple="first")
+ortho_res <- ortho_res %>% select(-c(Name, tb_orf.y)) %>% dplyr::rename("tb_orf" = "tb_orf.x") %>% dplyr::rename("ident_var" = "v/i")
+#3317
+
+
+#look at genes with different calls
+ortho_res %>% filter(bovis_call != tb_call)
+#517 with different calls
+ortho_res %>% filter(bovis_call != tb_call & ident_var=="Identical")
+#385 of these have 'identical' protein products acc to Malone et al
+
+es_bov_diff <- ortho_res %>% filter(bovis_call == "ES" & tb_call != "ES") 
+#145 bovis essentials are not called ES in tb
+es_bov_diff %>% filter(tb_call=="NE")
+#87 are ess in bovis and ne in tb
+es_tb_diff <- ortho_res %>% filter(tb_call == "ES" & bovis_call !="ES")
+#94 essential in tb and not called essential in bovis
+es_tb_diff %>% filter(bovis_call=="NE")
+#55 essential in tb and NE in bovis
+
+
+diff <- ortho_res %>% filter(bovis_call != tb_call & abs(bovis_tas-tb_tas) > 0)
+#37 of the different calls had +/-1 ta sites
+diff %>% ungroup() %>% dplyr::count(ident_var)
+#19 with diff calls/diff ta sites are identical, 18 variable
+
+saveRDS(ortho_res, here("in_vitro_data/R_Data/results_with_aligned_orthologs.RData"))
+
+#make df of orthologous gene names only
+ortho_names <- ortho_res %>% select(bovis_orf, tb_orf)
+write_csv(ortho_names, file=here("in_vitro_data/mf_analysis/ortho_gene_names.csv"))
+
+
+```
+
+
+The 'identical/variable' category has to do with comparing amino acid length and NS SNPs but can still mean there are SNPs that eliminate/create TA sites. Not sure one or two TA sites will change call--depends on length of the gene and position of the TA site.
+
+I did the positional orfs relative to tb orf and listed multiple mbovis orfs instead of separate pairings. blast orfs have all possible pairings
+
+don't combine--just use blast orthologs
+
+```{r compare positional and blast}
+#don't run
+
+library(dplyr)
+pos_orthos   <- readRDS(
+  here("in_vitro_data/R_Data/results_with_aligned_orthologs.RData"))
+pos_orthos <- pos_orthos %>% select(-c(tb_len, bovis_len, bovis_call, tb_call))
+nrow(pos_orthos)
+#3317
+nrow(pos_orthos %>% distinct(tb_orf))
+#3317
+
+blast_orthos <- readRDS(
+  here("in_vitro_data/R_data/blast_orthologs_same_tas.RData"))
+nrow(blast_orthos)
+#3424
+nrow(blast_orthos %>% distinct(tb_orf))
+#3422
+blast_orthos %>% group_by(tb_orf) %>% filter(dplyr::n()>1)
+
+#make compatible bovis orf
+blast_orthos$bovis_orf <- sub("MB", "Mb", blast_orthos$bovis_orf)
+#in positional but not in blast
+nrow(pos_orthos %>% filter(!tb_orf %in% blast_orthos$tb_orf))
+#66
+#in blast but not in positional
+blast_only <- blast_orthos %>% filter(!tb_orf %in% pos_orthos$tb_orf)
+#172
+
+
+
+#are pairs the same?
+blast_pairs <- 
+  blast_orthos %>% 
+  mutate(pairs = paste(bovis_orf, tb_orf, sep = "_")) %>%
+  select(bovis_orf, tb_orf, pairs)
+
+pos_pairs <- 
+  pos_orthos %>%
+  mutate(pairs = paste(bovis_orf, tb_orf, sep = "_")) %>%
+  select(bovis_orf, tb_orf, pairs)
+
+length(intersect(blast_pairs$pairs, pos_pairs$pairs))
+#3212 the same
+nrow(dplyr::setdiff(blast_pairs, pos_pairs))
+#212
+diff_pairs <- dplyr::setdiff(blast_pairs, pos_pairs)
+#161 with bovis locus tags
+
+left_join(diff_pairs, pos_pairs, by="tb_orf")
+
+#check disparities on mycobrowser:
+#some have different genes with similarities (ESX-6 etc)
+#transposases have different names
+#some of those lacking old locus names have bovis orthologs on mycobrowser if searched by tb orf
+
+left_join(diff_pairs, blast_pairs, by="tb_orf")
+#215 rows
+
+```
+
+
+join with calls and make final set of orthologs (blast only)
+
+```{r make final set}
+
+library(dplyr)
+
+blast_orthos <- readRDS(
+  here("in_vitro_data/R_data/blast_orthologs_same_tas.RData"))
+#make compatible bovis orf
+blast_orthos$bovis_orf <- sub("MB", "Mb", blast_orthos$bovis_orf)
+#join with calls
+comp_data <- readRDS(here("in_vitro_data/R_data/sorted_comp_calls_19_10_23.RData"))
+
+#how many repeats
+blast_orthos %>% group_by(bovis_orf) %>% filter(dplyr::n()>1)
+#0
+test_join <- left_join(blast_orthos, comp_data, by=c( "tb_orf"))
+nrow(test_join)
+#3586
+
+test_name <- 
+  test_join %>%
+  mutate(bovis_orf.x = replace(bovis_orf.x,
+                             is.na(bovis_orf.x),
+                             bovis_orf.y[is.na(bovis_orf.x)]
+                             ) ) %>%
+  select(-c(bovis_orf.y, gene.y))
+nrow(test_name)
+#3586
+colnames(test_name) <- sub(".x", "", colnames(test_name))
+
+#how many unique pairs?
+nrow(test_name %>% distinct(bovis_orf, tb_orf))
+#3585
+nrow(test_name %>% distinct(bovis_orf))
+#3585
+nrow(calls_complete %>% distinct(tb_orf))
+#3486
+
+saveRDS(test_name, here("in_vitro_data/R_data/blast_orthologs_complete.RData"))
+```
+
+Venn diagram comparing essential orthologous genes in Mtb and mbovis and GD genes 
+using joined blast orthologs (3585)
+
+
+```{r venn_essential}
+library(ggplot2)
+library(VennDiagram)
+library(eulerr)
+
+venn_data <- readRDS(here("in_vitro_data/R_data/blast_orthologs_complete.RData"))
+
+bovis_ess <- venn_data$bovis_orf[which(venn_data$bovis_call=="ES")]
+tb_ess    <- venn_data$bovis_orf[which(venn_data$tb_call=="ES")]
+bovis_gd  <- venn_data$bovis_orf[which(venn_data$bovis_call=="GD")]
+tb_gd     <- venn_data$bovis_orf[which(venn_data$tb_call=="GD")]
+
+nrow(venn_data %>% filter(bovis_call=="GA"))
+#123
+nrow(venn_data %>% filter(tb_call=="GA"))
+#1
+
+#number of genes with ES in either genome
+length(union(bovis_ess, tb_ess))
+#613
+#number with ES or GD in either
+length(union(union(bovis_ess, tb_ess), union(bovis_gd, tb_gd)))/nrow(venn_data)
+#811
+#22.6%
+
+#number that are either ES or GD in both
+defect <- c("ES", "GD")
+nrow(venn_data %>% filter(tb_call %in% defect & bovis_call %in% defect))
+#492
+492/nrow(venn_data)
+#13.7%
+
+length(union(bovis_gd, tb_gd))
+#298
+
+613/nrow(venn_data)
+#17.1%
+
+#make venn diagram (simple with ES only)
+venn_es <- venn.diagram(list(Mbovis_ES = bovis_ess, Mtb_ES = tb_ess), 
+                        filename = here("in_vitro_data/images/venn_essential.png"),
+                        print.mode = c("raw"),
+                        #pattern = "Venn_2set_simple",
+                        disable.logging = T,
+                        scaled = T,
+                        cex = c(0),
+                        fill = c("hotpink", "blue"),
+                        #cat.cex = c(1.2, 1.2),
+                        cat.cex = c(0),
+                        #cat.just = list(c(0,-4), c(1,-4)),
+                        #main = c("Comparison of essential genes among orthologous genes"),
+                        #sub = c("Total number of ES calls in either genome = 574"),
+                        #main.cex = c(1),
+                        #sub.cex = c(0.8),
+                        #main.fontfamily = "sans",
+                        #sub.fontfamily = "sans",
+                        #cat.fontfamily = "sans",
+                        #fontfamily = "sans"
+                        )
+venn_es
+
+
+venn.plot <- venn.diagram(list(
+  Mbovis_ES = bovis_ess, Mtb_ES = tb_ess, Mbovis_GD=bovis_gd, Mtb_GD = tb_gd), 
+                          filename = here("in_vitro_data/images/venn_essential_gd.png"),
+  #print.mode = c("raw", "percent"),                        
+  disable.logging=T,
+  scaled = T,
+  cex = c(0),
+  fill=c("magenta2", "blue", "darkmagenta", "lightskyblue"),
+  #alpha = c(0.5,0.3, ),
+  cat.cex = c(1.2, 1.2, 1.2, 1.2),
+  #cat.just = list(c(0,-4), c(1,-4)),
+  main = c("Comparison of essential and growth defect genes"),
+  main.cex = c(1.5),
+  main.fontfamily = "sans",
+  cat.fontfamily = "sans",
+  fontfamily = "sans"
+)
+venn.plot
+
+#don't like zeros in spaces--too complicated. maybe try different package
+
+# venn.plot2 <- draw.quad.venn(
+# length(bovis_ess), length(tb_ess), length(bovis_gd), length(tb_gd),
+# n12 = length(intersect(bovis_ess,tb_ess)),
+# n13 = 0,
+# n14 = length(intersect(bovis_ess, tb_gd)),
+# n23 = length(intersect(tb_ess, bovis_gd)),
+# n24 = 0,
+# n34 = length(intersect(bovis_gd, tb_gd)),
+# n123 = 0,
+# n124 = 0,
+# n134 = 0,
+# n234 = 0,
+# n1234 = 0,
+# category = c("Mbovis_ES", "Mtb_ES", "Mbovis_GD", "Mtb_GD"),
+# fill = c("blue", "red", "darkblue", "pink"),
+# lty = "blank",
+# cex = 2,
+# cat.cex = 2,
+# )
+# png(filename = here("ess_gd_venn_plot.png"))
+# grid::grid.draw(venn.plot2)
+# dev.off()
+#no improvement
+
+
+png(here("in_vitro_data/images/euler_plot.png"), width = 10, height=8, units="in", res=300)
+euler.plot <- euler(
+  c("Mtb_ES" = length(setdiff(setdiff(tb_ess, bovis_ess), bovis_gd)),
+    "Mbovis_ES" = length(setdiff(setdiff(bovis_ess, tb_ess), tb_gd)), 
+    "Mtb_GD" = length(setdiff(setdiff(tb_gd, bovis_gd), bovis_ess)),
+    "Mbovis_GD" =length(setdiff(setdiff(bovis_gd, tb_gd), tb_ess)),
+    "Mtb_ES&Mbovis_ES" = length(intersect(bovis_ess, tb_ess)), #a and b
+    "Mtb_ES&Mbovis_GD" = length(intersect(bovis_gd, tb_ess)), #a and d
+    "Mtb_GD&MBovis_ES" = length(intersect(bovis_ess, tb_gd)), # c and b
+    "Mtb_GD&Mbovis_GD" = length(intersect(bovis_gd, tb_gd))   #c and d
+    ),
+  shape = "ellipse"
+)
+plot(euler.plot, 
+     quantities = list(type = c("counts")),
+     fills = c("green3", "royalblue1", "lightgreen", "lightskyblue1", "royalblue1"))
+dev.off()
+#still unsatisfactory since can't seem to overlap the Mbovis in a neat way
+
+
+
+```
+
+How many actually identical orthologs (in terms of protein product and number of TA sites) are there and how many calls differ among them?
+
+```{r identical orthologs}
+library(dplyr)
+data <- readRDS(here("in_vitro_data/R_data/blast_orthologs_complete.RData"))
+#identical protein product/TA sites
+identical <- data %>% filter(`v/i`=="Identical" & tb_tas==bovis_tas)
+#2601 orthologs
+
+#identical only in TA sites
+ta_identical <- data %>% filter(tb_tas==bovis_tas)
+ta_identical
+#3365 orthologs with identical TA sites
+
+#differ by max of one
+data %>% filter(tb_tas==bovis_tas +1 | tb_tas==bovis_tas-1 | tb_tas==bovis_tas)
+#3586
+
+#number of 'identical' genes with snps
+identical %>% filter(snps=="variable")
+#304
+
+#number of 'identical' with different calls
+identical %>% filter(bovis_call != tb_call)
+#394
+
+#number of identical with different calls and snps
+identical %>% filter(bovis_call != tb_call & snps=="variable")
+#44
+
+```
+
+
+
+## functional enrichment of call categories
+
+Are genes that are essential in both overrepresented by certain functional category?
+(hypergeometric test)
+
+Are genes that are different overrrepresented by certain funct category?
+
+GSEA analysis?
+
+```{r functional_cat enrichment}
+library(dplyr)
+library(exact2x2)
+library(rtracklayer)
+
+ortho_res <- readRDS(here("in_vitro_data/R_data/blast_orthologs_complete.RData"))
+
+#many of the genes have no functional category assigned--go to gff for tb 
+mtb_granges<-import(here("ref_seqs/Mycobacterium_tuberculosis_H37Rv_gff_v4.gff"))
+mtb_genes<-as.data.frame(mtb_granges)[which(mtb_granges$type == "CDS"),]
+mtb_genes <- mtb_genes %>% select(Locus, Functional_Category)
+mtb_genes$Functional_Category <- sapply(mtb_genes$Functional_Category, paste, collapse="/")
+
+data_fc <- left_join(ortho_res, mtb_genes, by=c("tb_orf"="Locus"))
+#how many more?
+nrow(data_fc %>% filter(is.na(Functional_Category)))
+#5 these have no func cat assigned
+# all NA change to unknown
+data_fc <- 
+  data_fc %>% 
+  mutate(Functional_Category = replace(Functional_Category,
+                                       is.na(Functional_Category),
+                                       "unknown")) %>%
+  dplyr::rename("protein_ident" = `v/i`)
+#code the categories
+data_fc$fc_code <- as.numeric(as.factor(data_fc$Functional_Category))
+
+#save this
+saveRDS(data_fc, here("in_vitro_data/R_data/functional_cat_df.RData"))
+
+both_ess <- data_fc %>% filter(bovis_call=="ES" & tb_call=="ES")
+#how many functional cats and how much of each?
+data_tally <- data_fc %>% group_by(fc_code) %>% summarise(num_genes = dplyr::n())
+ess_tally  <- both_ess %>% group_by(fc_code) %>% summarise(num_ess_genes = dplyr::n())
+fc_tally <- left_join(data_tally, ess_tally, by="fc_code")
+fc_tally$num_ess_genes[is.na(fc_tally$num_ess_genes)] <- 0
+
+enrich_df <- tibble(fc_code = c(1:10), enrich = "")
+for (i in 1:10){
+  # make contingency table
+  #x<- essential in_cat, all other genes in category
+  ess_cats <- fc_tally$num_ess_genes[fc_tally$fc_code == i]
+  ne_cats  <- fc_tally$num_genes[fc_tally$fc_code == i] - ess_cats
+  #y<- essential_not_in category, ne genes _not_in category
+  ess_noncats <- sum(fc_tally$num_ess_genes[fc_tally$fc_code != i])
+  ne_noncats  <- sum(fc_tally$num_genes[fc_tally$fc_code != i]) - ess_noncats
+
+  x <- c(ess_cats, ne_cats)
+  y <- c(ess_noncats, ne_noncats)
+  test_data <- rbind(x,y)
+
+  mp<- exact2x2(test_data, alternative="greater", midp=TRUE)
+  #print(mp$p.value)
+  enrich_df$enrich[i] <- mp$p.value
+}
+
+map_fc <- data_fc %>% select(Functional_Category, fc_code) %>% distinct(fc_code, Functional_Category) %>% arrange(fc_code)
+
+enrich_df <- left_join(enrich_df, map_fc, by=c("fc_code"))
+#correct for multiple testing
+enrich_df <- enrich_df %>% mutate(adj_pvalue = p.adjust(enrich, method="BH"))
+enrich_df
+
+
+# are genes differently essential in the two genomes enriched for any categories?
+bov_ess <- data_fc %>% filter(bovis_call=="ES" & tb_call=="NE")
+#87 bovis essentials are not called ES in tb
+```
+
+
+Information pathways and intermediary metabolism and respiration are overrepresented in the genes called essential in both genomes.
+
+
+
+# Resampling Analysis
+
+Earlier work for this in hiseq_tnseq.Rmd
+
+Create prot tables for bovis on tb genome and tb on bovis genome using only the positionally orthologous genes from alignment
+
+Determining orthologous genes not entirely straightforward--some single genes in tb overlap two genes in mbovis. 
+
+For example:
+
+```{r}
+malone_df<-read.delim("~/tn_seq/data/Malone_orthologs.csv", sep=",", header=FALSE, stringsAsFactors=F, skip=3)
+malone_df[101:102,]
+```
+
+
+
+How would resampling work then since based on reshuffling the same ta sites within the same gene? need to use Mbovis coordinates to map to tb because have more genes? Earlier I made two prot tables with only orthologous genes (from Malone) and corresponding gene boundaries. But this isn't good as length of genes actually differ in some cases. Instead use alignment method that I was exploring for ncRNA and create new 'tb on bovis' prot table.
+
+Map bovis genes to aligned coordinates on tb.
+
+This could be overkill and not strictly necessary as long as I use genes without insertions/deletions and exclude those that are fused.
+
+Use the combined method list of orthologs from above, not the malone data
+
+```{r strict orthology}
+
+## dont run
+
+
+library(tidyverse)
+malone_df<-read_csv(here("data/Malone_orthologs.csv"), skip=2, show_col_types = F) %>% select(2,3,4,6,11)
+colnames(malone_df)<-c("TB_orf", "Bovis_orf", "gene", "func_cat", "i/v")
+#nrow = 3999
+#number of unique bovis genes
+malone_df %>% distinct(Bovis_orf)
+#3963
+
+#no of unique tb genes
+length(unique(malone_df$TB_orf))
+#3931
+
+#eliminate all genes that are either in TB_orf or Bovis_orf more than once
+
+bovis_count <- malone_df %>% group_by(Bovis_orf) %>% summarise(count = n())
+bovis_remove <- bovis_count %>% filter(count != 1)
+
+tb_count <- malone_df %>% group_by(TB_orf) %>% summarise(count = n())
+tb_remove <- tb_count %>% filter(count != 1)
+
+strict_orthos <- malone_df %>% filter(!Bovis_orf %in% bovis_remove$Bovis_orf & !TB_orf %in% tb_remove$TB_orf)
+
+nrow(strict_orthos)
+#3797
+saveRDS(strict_orthos, here("in_vitro_data/R_data/strict_orthologs.RData"))
+```
+
+Should probably verify length of genes? Use prot tables filtered to just have orthologous genes
+
+```{r resampling_prot_tables_filtered}
+## don't run
+
+
+library(rtracklayer)
+library(dplyr)
+
+bovis_pt<-read_delim(here("ref_seqs/Mbovis_LT708304.prot_table"), col_names = F)
+head(bovis_pt)
+## the headings 
+colnames(bovis_pt)<-c("protein", "start", "end", "strand", "length", "type", "na", "name", "locus")
+nrow(bovis_pt)
+#4045
+# keep only rows with CDS
+bovis_pt <- bovis_pt %>% filter(type == "CDS")
+nrow(bovis_pt)
+#4000
+
+## import list of orthologous genes from malone
+strict_orthos <- readRDS(here("in_vitro_data/R_data/strict_orthologs.RData"))
+nrow(strict_orthos)
+#3797
+#make locus name compatible
+strict_orthos$Bovis_orf <- sub("Mb", "MB", strict_orthos$Bovis_orf)
+
+# will do resampling with bovis as control--what shows different essentiality (change of insertions) in tb
+#use only genes for which there is an ortholog in tb (strict_orthos)
+
+bovis_strict.pt <- bovis_pt %>% filter(locus %in% strict_orthos$Bovis_orf)
+nrow(bovis_strict.pt)
+#3797
+#this is prot table to use for control dataset
+
+#tb prot table with only strictly orthologous genes (still Rv loci)
+mtb_pt <- read_delim(here("ref_seqs/Mtb_AL123456_3.prot_table"), col_names=F)
+nrow(mtb_pt)
+#4074
+colnames(mtb_pt) <- c("protein", "start", "end", "strand", "length", "type", "na", "name", "locus")
+#add in length
+mtb_pt <- mtb_pt %>% mutate(length = end-start+1)
+tb_strict.pt <- mtb_pt %>% filter(locus %in% strict_orthos$TB_orf)
+#3797
+
+#are lengths equal?
+len_test <- left_join(strict_orthos, mtb_pt, by=c("TB_orf" = "locus"))
+len_test <- left_join(len_test, bovis_pt, by=c("Bovis_orf" = "locus"), suffix=c(".tb", ".bovis"))
+#change length of bovis to nt
+len_test <- len_test %>% mutate(length.bovis = end.bovis-start.bovis + 1)
+diff_len <- len_test %>% filter(length.tb != length.bovis)
+nrow(diff_len)
+#197 with diff lengths.
+diff_len <- diff_len %>% mutate(diff = abs(length.tb-length.bovis))
+
+
+#how much is avg difference?
+mean(diff_len$diff)
+#212.6
+median(diff_len$diff)
+#69
+range(diff_len$diff)
+
+#how many more than 10 nt diff
+diff_len %>% filter(diff > 10) %>% arrange(-dplyr::desc(diff))
+#165
+#how many 'identical' acc to malone?
+diff_len %>% filter(diff > 10 & `i/v`=="Identical")
+#19
+```
+
+Look for TA sites in each? Use only aligned regions? 
+
+For example for Rv3487c/Mb3517c which are 'identical' in Malone study but show 297bp difference in length:
+
+>Mb3517c, lipF, len: 376 aa. Equivalent to esterase/lipase lipF from Mycobacterium bovis BCG strain Korea 1168P (100% identity with 375 aa overlap). 5' extension to annotation based on de novo proteomics of Mycobacterium tuberculosis strain H37Rv under exponential conditions.
+
+Would only want to look at region that aligns exactly, or with high % identity in which case need to verify the same number of TA sites.
+
+
+## use blast orthologs filtered as above
+
+```{r create_resampling_prot_tables}
+library(rtracklayer)
+library(dplyr)
+
+#make prot table with bovis gene coordinates but tb orf names for resampling
+#use only orthologous pairs 
+#control will be TB genome, exp will be bovis
+
+ortho_res <- readRDS(here("in_vitro_data/R_data/blast_orthologs_complete.RData"))
+
+# bovis prot table
+bovis_pt <- read_delim(here("in_vitro_data/bovis_best.prot_table"), delim = "\t", col_names = F)
+colnames(bovis_pt) <- c("descr", "start", "end", "strand", "length", "type", "none", "name", "mb_orf")
+
+# which of bovis genes also in mtb--make new prot table (bovis_on_tb.prot_table)
+bovis_on_tb <- bovis_pt %>% filter(mb_orf %in% ortho_res$bovis_orf)
+#3579
+
+# change name on bovis to reflect orthologous gene loci in mtb
+sh_ortho <- ortho_res %>% select(c(bovis_orf, tb_orf))
+
+bovis_on_tb_orth <- left_join(bovis_on_tb, sh_ortho, by = c("mb_orf" = "bovis_orf"))
+
+
+#rearrange columns, now have tb and bovis locus names in same prot_table
+bovis_on_tb_orth <- bovis_on_tb_orth %>% relocate(mb_orf, .after = none)
+
+#change order of columns to match H37Rv prot table
+bovis_on_tb_orth <- bovis_on_tb_orth %>% select(-c(type))
+#bovis_on_tb_orth <- bovis_on_tb_orth %>% mutate(none2 = "-")
+
+write.table(bovis_on_tb_orth, here("in_vitro_data/bovis_on_tb_orthos.prot_table"), sep="\t", col.names = F, row.names = F, quote=F)
+
+```
+
+
+
+## resampling with new ortholog list
+
+using parameters to reduce outliers
+
+
+```{r resamp bovis on tb}
+library(dplyr)
+
+res <- read_delim(
+  here("in_vitro_data/resampling_061123/bovis_on_tb_resamp_out_winz.txt"),
+                  delim="\t", skip = 6, show_col_types = F)
+
+res <- res %>% dplyr::rename("Orf" = "#Orf")
+res <- res %>% dplyr::rename("pvalue" = "2tp-value")
+#remove adj pval as this uses left tail only for calculation (from in vivo exper) we need to use 2-tailed pval as we don't know which direction change will be
+res <- res %>% select(-c(`Adj. p-value`))
+res <- res %>% mutate(adj_pvalue = p.adjust(pvalue, method = "BH"))
+saveRDS(res, here("in_vitro_data/R_data/bovis_on_tb_resamp_winz.RData") )
+
+genes_changed <- res %>% filter(adj_pvalue < 0.05) %>% arrange(desc(log2FC)) %>% select(-c(`pval-utail`, `pval-ltail`))
+genes_changed
+
+#add in calls and func_cat
+ortho_res <- readRDS(here("in_vitro_data/R_data/functional_cat_df.RData"))
+ortho_res_sh <- ortho_res %>% select(c(tb_orf, bovis_orf, bovis_call, tb_call, protein_ident, Functional_Category)) 
+genes_changed <- left_join(, ortho_res_sh, by = c("Orf" = "tb_orf")) %>% 
+  relocate(c(13:17), .after = Name) %>% relocate(tb_call, .before = bovis_call)
+genes_changed <- genes_changed %>% relocate(tb_call, .before = bovis_call)
+write_csv(genes_changed, here("in_vitro_data/resampling_061123/resamp_changed_genes.csv"))
+
+```
+
+volcanos and pval_dist
+
+```{r volcano_pval_dist}
+
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+
+#log2FC vs -log10(adj-pvalue)
+
+#for resampling data
+results <- readRDS(here("in_vitro_data/R_data/bovis_on_tb_resamp_winz.RData"))
+#add significant column and change 0 pvalue to something plottable
+results_volcano <- results %>% mutate(signif = ifelse(adj_pvalue < 0.05, "signif", "non-sig")) %>% mutate(sig_label = ifelse(signif=="signif", Orf, ""))
+results_volcano$adj_pvalue[results_volcano$adj_pvalue==0] <- 0.00001
+results_volcano$pvalue[results_volcano$pvalue==0] <- 0.00001
+ggplot(results_volcano, aes(x=log2FC, y=-log10(pvalue), col=signif, label=sig_label)) +
+  geom_point(alpha=0.5) +
+  theme_minimal() +
+  geom_vline(xintercept=c(-2.0, 2.0), col="red") +
+  scale_color_manual(values=c("black", "blue")) +
+  #geom_text(size=2, nudge_y=-.15, nudgy_x=-0.5)
+  geom_text_repel(size=3) +
+  ggtitle("Resampling results") +
+  theme(plot.title = element_text(hjust=0.5))
+ggsave(here("in_vitro_data/images/resamp_volcano_winz.png"))
+
+#eliminate pvalues=1
+hist_results_volcano <- results_volcano %>% filter(pvalue !=1)
+
+ggplot(hist_results_volcano) +
+  geom_histogram(aes(x=pvalue), bins=100)
+ggsave(here("in_vitro_data/images/resamp_hist_winz.png"),width=9, height=7)
+
+ggplot(hist_results_volcano, aes(x=pvalue)) +
+  stat_ecdf()
+
+
+```
+
+Change parameters and use mean vs sum of insertions. (run with new blast-ortholog generated prot table) with 100000 permutations (should further resolve p-values).
+
+```
+transit resampling mtb_hiseq/TPP/mtb22_hiseq_tpp.wig,mtb_hiseq/TPP/mtb23_hiseq_tpp.wig bovis_hiseq/tpp/bovis_hiseq_tpp_19.wig,bovis_hiseq/tpp/bovis_hiseq_tpp_21.wig mtbH37Rv.prot_table,bovis_on_tb_orthos.prot_table resampling_131123/bovis_on_tb_resamp_mean_winz.txt -winz -PC 5 -s 100000
+```
+
+
+```{r mean_reps_resampling_X10}
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+
+#log2FC vs -log10(adj-pvalue)
+
+#for resampling data
+results <- read_tsv(here("in_vitro_data/resampling_131123/bovis_on_tb_resamp_mean_winz.txt"), skip = 6, show_col_types = F)
+
+res <- results %>% dplyr::rename("Orf" = "#Orf")
+res <- res %>% dplyr::rename("pvalue" = "2tp-value")
+#remove adj pval as this uses left tail only for calculation (from in vivo exper) we need to use 2-tailed pval as we don't know which direction change will be
+res <- res %>% select(-c(`Adj. p-value`))
+res <- res %>% mutate(adj_pvalue = p.adjust(pvalue, method = "BH")) %>% select(-c(`pval-utail`, `pval-ltail`))
+saveRDS(res, here("in_vitro_data/R_data/bovis_on_tb_resamp_mean_winz_x10.RData") )
+
+#add significant column and change 0 pvalue to something plottable
+results_volcano <- res %>% mutate(signif = ifelse(adj_pvalue < 0.05, "signif", "non-sig")) %>% mutate(sig_label = ifelse(signif=="signif", Orf, ""))
+results_volcano$adj_pvalue[results_volcano$adj_pvalue==0] <- 0.00001
+results_volcano$pvalue[results_volcano$pvalue==0] <- 0.00001
+
+#how many signif?
+nrow(results_volcano %>% filter(signif=="signif"))
+#30
+#how many with >3 log2FC and signif
+nrow(results_volcano %>% filter(signif=="signif" & abs(log2FC) >=3))
+#21
+
+ggplot(results_volcano, aes(x=log2FC, y=-log10(pvalue), col=signif, label=sig_label)) +
+  geom_point(alpha=0.5) +
+  theme_minimal() +
+  geom_vline(xintercept=c(-2.0, 2.0), col="red") +
+  scale_color_manual(values=c("black", "blue")) +
+  #geom_text(size=2, nudge_y=-.15, nudgy_x=-0.5)
+  geom_text_repel(size=3) +
+  #ggtitle("Resampling results") +
+  ylab("- log10(p-value)") +
+  xlab("log2 Fold-difference") +
+  #guides(fill=guide_legend(title="Adj p-value < 0.05"))
+  #theme(plot.title = element_text(hjust=0.5))
+  theme(legend.position = "none")
+ggsave(here("in_vitro_data/images/resamp_volcano_means_x10.png"))
+
+#eliminate pvalues=1
+hist_results_volcano <- results_volcano %>% filter(pvalue !=1)
+ggplot(hist_results_volcano) +
+  geom_histogram(aes(x=pvalue), bins=200)
+ggsave(here("in_vitro_data/images/resamp_hist_params_means_x10.png"),width=9, height=7)
+
+ggplot(hist_results_volcano, aes(x=pvalue)) +
+  stat_ecdf()
+```
+
+
+Add in orthologous data and other study comparison calls
+
+```{r examine_final_res}
+library(readxl)
+library(ggplot2)
+library(dplyr)
+#for resampling data
+res <- readRDS( here("in_vitro_data/R_data/bovis_on_tb_resamp_mean_winz_x10.RData"))
+
+#add in calls and func_cat
+ortho_res <- readRDS(here("in_vitro_data/R_data/functional_cat_df.RData"))
+ortho_res_sh <- ortho_res %>% select(c(tb_orf, bovis_orf, bovis_call, tb_call, snps, protein_ident, Functional_Category)) 
+ortho_res_sh <- ortho_res_sh %>% mutate(snps = ifelse(snps=="identical", "N", "Y"))
+ortho_res_complete <-  left_join(res, ortho_res_sh, by = c("Orf" = "tb_orf")) %>% 
+  relocate(c(13:17), .after = Name) %>% relocate(tb_call, .before = bovis_call)
+
+#add in calls from dejesus and butler
+data <- read_excel(here("in_vitro_data/Supplementary data file_31_03_SLK.xlsx"))
+data <- data %>% select(c(2,8,9)) %>% dplyr::rename(c("Mtb_dejesus" = "Gene essentiality in M.tb (De Jesus, 2017 doi: 10.1128/mBio.02133-16)", "Mbovis_butler" = "Gene essentiality in M.bovis (doi: 10.1038/s41396-019-0572-z)"))
+
+ortho_res_merge <- left_join(ortho_res_complete, data, by=c("Orf" = "Mtb")) %>% relocate(Mtb_dejesus, .after=tb_call) %>% relocate(Mbovis_butler, .after=bovis_call)
+
+saveRDS(ortho_res_merge, here("in_vitro_data/R_data/resamp_res_final_x10.RData"))
+
+#spreadsheet
+write_csv(ortho_res_merge, here("in_vitro_data/resampling_131123/resamp_res_final_x10.csv"))
+
+
+genes_changed <- ortho_res_complete %>% filter(adj_pvalue < 0.05) %>% arrange(desc(log2FC))
+#32
+
+write_csv(genes_changed, here("in_vitro_data/resampling_131123/resamp_changed_genes_winz_x10.csv"))
+
+#number attenuated (more 'essential' in bovis than in tb)
+att_genes <- genes_changed %>% filter(log2FC <0)
+att_genes %>% arrange(Orf)
+#18
+#genes with different calls and attenuated
+genes_changed %>% filter(tb_call != bovis_call & log2FC <0)
+#9
+
+#genes overrepresented (less 'essential' (or even detrimental when intact) in bovis vs tb)
+orep_genes <- genes_changed %>% filter(log2FC > 0)
+#14
+genes_changed %>% filter(tb_call != bovis_call & log2FC > 0)
+#12
+#how many of these are NE to GA?
+orep_genes %>% filter(bovis_call =="GA" | tb_call == "GA") %>% arrange(-log2FC)
+#7
+
+
+#what are calls in tb for GA calls in bovis
+ortho_res %>% filter(bovis_call=='GA') %>% group_by(tb_call) %>% count()
+#122 are NE and 1 is GD
+ortho_res %>% filter(bovis_call=='GA' & tb_call=='GD')
+#Mb1040/Rv1012, variable protein product, length and snps but same number of TAs
+```
+
+Attenuated (fewer insertions in genes) in bovis:
+
+8 genes are NE in both strains but attenuated (fewer insertions in bovis) these still have considerable log2FC.
+
+9 genes have different calls and are attenuated in bovis
+
+4 of these are NE in tb and ES in bovis
+  Rv2400c/subl
+  Rv3490/otsA  (this was borderline overrepresented in menadione bovis; not identical; alpha-trehalose phosphate synthase)
+  Rv1286
+  Rv0244c/fadE5
+  
+NE tb to GD bovis:
+  Rv3682/ponA2
+  Rv3680
+  Rv2222c/glnA2 (glutamine synthetase, one of 4, 100% identical)
+
+
+Overrepresented (more insertions in genes) in bovis:
+
+Rv0812/Mb0835 are called NE in both Mtb and Mbovis, but there is a big increase in insertions in Mbovis. And this is spread throughout all the TA sites. IN Mtb there are only 3 sites with insertions and these are surrounding a stretch of >400nt with no insertions at all and then a site with LOADS of insertions right after gene boundary. Resampling indicates this arrangement is very unlikely to have happened by chance (adj pvalue < 10^10). DeJesus call is GD. There are SNPs in the Mbovis gene that lead to an amino acid substitution. At 145 there is a M/I substitution in Mbovis (M in Mbovis). All one domain.
+
+There was no significant attenuation in the pooled in vivo Mbovis samples.
+
+2 functions:
+
+1) 4-amino-4-deoxychorismate lyase: aminodeoxychorismate (ADC) lyase (ADCL) involved in _folate biosynthesis_  (nucleic acid synthesis)
+
+2) D-amino acid transaminase (DAAT) for _Peptidoglycan synthesis_ (PG) (cell wall)
+
+2-oxoglutarate + D-alanine = D-glutamate + pyruvate
+
+
+Residue 153 is pyrodoxyl 5'-phosphate binding site and 149 has been mutated to discover this. This is a bi-functional enzyme in Mtb that can respond to env and either work for nucleic acid synthesis or for cell wall biosynthesis. Might prioritise PG production over amino acid biosynthesis (glu and ala). Why wouldn't Mbovis need this? Is this a virulence factor?
+
+[Black et al, 2021](https://pubmed.ncbi.nlm.nih.gov/33950161/)
+
+This gene could be target for treatment of MTb as folate and peptidoglycan biosynthesis have been targetted. But this may not work for Mbovis. 
+
+Rv3579c is NE in tb / GA in bovis. dejesus said ES in mtb and butler said GD in bovis. LOADS of insertions in bovis gene. Is this because of media differences? It is a putative rRNA/tRNA methyltransferase (epigenetics?)
+
+Rv0467/ icl1 GA in bovis and NE in tb (but GD in dejesus). likely to be less important for survival in bovis in any event
+
+Rv3497c/mce4C related to lipid catabolism and virulence. essential for Mtb on cholesterol
+
+Rv2940c/mas 
+Catalyzes the elongation of N-fatty acyl-CoA with methylamalonyl-CoA (not malonyl-CoA) as the elongating agent to form mycocerosyl lipids. Multi-function enzyme. Is almost identical in bovis but not entirely. different function in TB?
+
+## any functional enrichment in changed genes using resampling log2FC
+
+Used methods from resampling analysis of menadione treated samples
+
+```{r gsea}
+
+library(dplyr)
+library(clusterProfiler)
+
+#gene to grouping
+tb_cog_assoc <- read_delim(here("menadione_tnseq/GSEA_files/H37Rv_COG_roles.dat"), col_names = F, show_col_types = F, delim="\t", comment="#", col_select=c(1:2))
+names(tb_cog_assoc) <- c("gene", "term")
+#2954
+#how many unique genes
+nrow(tb_cog_assoc %>% distinct(gene))
+#2871
+tb_cog_assoc <- tb_cog_assoc %>% relocate(term, .before=gene)
+
+#cog grouping to role
+cog_roles <- read_delim(here("menadione_tnseq/GSEA_files/COG_roles.dat"), col_names = F, show_col_types = F, delim="\t", comment="#", col_select=c(1:2))
+names(cog_roles) <- c("term", "name")
+
+#make ranked list of genes by LFC
+#read resampling data (new param data)
+
+resamp_data <- readRDS(here("in_vitro_data/R_data/resamp_res_final_x10.RData"))
+
+genes_lfc_vec <-resamp_data$log2FC
+names(genes_lfc_vec) <- resamp_data$Orf
+ranked_genes_lfc <- sort(genes_lfc_vec, decreasing=TRUE)
+#saveRDS(ranked_genes_lfc, here("menadione_tnseq/R_data/ranked_genes_lfc.RData"))
+#sorted by signed-log-p-value, SLPV=sign(LFC)*(log(pval))
+#first have to change zero pvalues to avoid Inf numbers
+
+resamp_data$adj_pvalue[resamp_data$adj_pvalue==0] <- 0.000001
+resamp_data$pvalue[resamp_data$pvalue==0] <- 0.000001
+
+genes_slpv <- resamp_data %>% mutate(slpv = log2FC*(log(pvalue)))
+genes_slpv_vec <- genes_slpv$slpv
+names(genes_slpv_vec) <- genes_slpv$Orf
+ranked_genes_slpv <- sort(genes_slpv_vec, decreasing = TRUE)
+#saveRDS(ranked_genes_slpv, here("menadione_tnseq/R_data/ranked_genes_slpv.RData"))
+
+term_gene <- read_tsv(here("menadione_tnseq/GSEA_files/H37Rv_GO_terms.txt"), col_names = F, show_col_types = F)
+names(term_gene) <- c("gene", "term")
+#switch order
+term_gene <- term_gene %>% relocate(term, .before=gene)
+
+term_name <- read_tsv(here("menadione_tnseq/GSEA_files/GO_term_names.dat"),
+                      col_names = F, show_col_types = F)
+names(term_name) <- c("term", "name")
+gsea_res <- GSEA(geneList = ranked_genes_lfc, TERM2GENE = term_gene, TERM2NAME = term_name)
+gsea_res
+#list of GO terms that were enriched
+gsea_res$ID
+gsea_res$Description
+gsea_res$p.adjust
+gsea_res$enrichmentScore
+#7 terms, all metabolism? p.adjust < 0.05
+#amino acid and cofactors (sulfate, quinone, folic acid)
+
+gsea_slpv <- GSEA(geneList = ranked_genes_slpv, TERM2GENE = term_gene, TERM2NAME = term_name)
+gsea_slpv
+gsea_slpv$ID
+gsea_slpv$Description
+gsea_slpv$enrichmentScore
+#a lot of amino acid metabolism and vitamin binding
+#"vitamin binding"                  "arginine metabolic process"      
+#"arginine biosynthetic process"    "cellular amide metabolic process"
+
+
+#cog roles
+gsea_cog_res <- GSEA(geneList = ranked_genes_slpv, TERM2GENE = tb_cog_assoc, TERM2NAME = cog_roles)
+gsea_cog_res
+#0 enriched cog terms with lfc and slpv
+
+#kegg terms (easier with Mtb)
+kegg_res <- gseKEGG(ranked_genes_lfc, "mtu")
+kegg_res
+
+#kegg id of pathway
+kegg_res$ID
+#description of pathway
+kegg_res$Description
+#sulfur metabolism; glycine serine and threonine metabolism
+
+#gives genes assoc with enrichment of pathway
+kegg_res$core_enrichment
+```
+
+
+## comparing with existing datasets
+
+Make venn diagrams comparing ess/gd genes in dejesus and butler datasets and Patil
+
+```{r compare_datasets_venns}
+library(dplyr)
+library(ggplot2)
+library(VennDiagram)
+library(eulerr)
+
+#use individual results from HMM to compare with different datasets
+#all_res <- readRDS(here("in_vitro_data/R_data/resamp_res_final_x10.RData"))
+bovis_hmm <- read.delim(here("in_vitro_data/hmm_bovis_new_add_19_21_genes.wig"), 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+# change to just gene and call--will affect downstream plots
+bovis_hmm <- select(bovis_hmm, 2, 1, 11)
+colnames(bovis_hmm) <- c("gene","ORF", "call")
+#match ORF format to orthologs ('Mb' vs 'MB')
+bovis_hmm$ORF<- sub('MB', 'Mb', bovis_hmm$ORF)
+#num of cds
+nrow(bovis_hmm %>% filter(grepl("Mb", ORF)))
+#3998
+bovis_hmm <- bovis_hmm %>% filter(grepl("Mb", ORF))
+
+
+mtb_results<-read.delim(here("in_vitro_data/hmm_mtb_new_add_22_23_genes.wig"), 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+# change to just gene and call--will affect downstream plots
+mtb_hmm <- select(mtb_results, 2, 1, 11)
+colnames(mtb_hmm) <- c("gene","ORF", "call")
+#num of CDS
+nrow(mtb_hmm %>% filter(grepl("Rv", ORF)))
+#4031
+mtb_hmm <- mtb_hmm %>% filter(grepl("Rv", ORF))
+
+bovis_ess <- bovis_hmm$ORF[which(bovis_hmm$call=="ES")]
+length(bovis_ess)/nrow(bovis_hmm)
+#13%
+tb_ess    <- mtb_hmm$ORF[which(mtb_hmm$call=="ES")]
+length(tb_ess)/nrow(mtb_hmm)
+#12%
+bovis_gd  <- bovis_hmm$ORF[which(bovis_hmm$call=="GD")]
+length(bovis_gd)
+#176
+length(bovis_gd)/nrow(bovis_hmm)
+#4.4%
+tb_gd     <- mtb_hmm$ORF[which(mtb_hmm$call=="GD")]
+
+#data from DeJesus
+dj_data <- read_csv(here("data/DeJesus_ORF_ess_calls.csv"), skip=1, col_names = F,  show_col_types = F) %>% select(1,13)
+colnames(dj_data) <- c("orf", "call")
+nrow(dj_data %>% filter(is.na(orf)==F))
+#4020
+
+#data from Patil
+pat_data_ess <- readRDS(here("in_vitro_data/R_data/patil_essentials.RData"))
+nrow(pat_data_ess)
+#678
+pat_ess <- pat_data_ess %>% pull(Gene)
+length(intersect(tb_ess, pat_data_ess$Gene))
+#412
+
+butler_data <- read_csv(here("data/Butler_results.csv"), col_names = F, show_col_types = F) %>% select(1,8)
+colnames(butler_data) <- c("orf", "call")
+nrow(butler_data %>% filter(is.na(orf) ==F))
+#3919
+
+dj_ess <- dj_data %>% filter(call =="ES" & is.na(orf)==F) %>% pull(orf)
+length(dj_ess)/nrow(dj_data)
+#461
+#11.5%
+dj_gd <-  dj_data %>% filter(call =="ES" & is.na(orf)==F) %>% pull(orf)
+
+butler_ess <- butler_data %>% filter(call=="ES" & is.na(orf)==F) %>% pull(orf)
+length(butler_ess)/nrow(butler_data)
+#7.3% essential
+
+
+butler_gd  <- butler_data %>% filter(call=="GD" & is.na(orf)==F) %>% pull(orf)
+length(butler_gd)
+#322
+length(butler_gd)/nrow(butler_data)
+#7.4%
+length(union(bovis_ess, bovis_gd))
+#816
+length(union(butler_ess, butler_gd))
+#640
+
+length(intersect(bovis_ess, union(butler_ess, butler_gd)))
+#381
+
+venn_es <- venn.diagram(list(Mbovis_ES = bovis_ess, Butler_ES = butler_ess ), 
+                        filename = here("in_vitro_data/images/bovis_butler_compare_es_venn.png"),
+                        print.mode = c("raw"),
+                        pattern = "Venn_2set_simple",
+                        disable.logging = T,
+                        scaled = T,
+                        cex = c(1),
+                        fill = c("magenta3", "darkblue"),
+                        cat.cex = c(1.2, 1.2),
+                        cat.just = list(c(0,-4), c(1,-4)),
+                        main = c("Comparison of Mbovis ES gene calls with Butler et al, 2020"),
+                        #sub = c("Total number of ES calls in either genome = 574"),
+                        main.cex = c(1),
+                        sub.cex = c(0.8),
+                        main.fontfamily = "sans",
+                        sub.fontfamily = "sans",
+                        cat.fontfamily = "sans",
+                        fontfamily = "sans")
+venn_es
+
+venn_gd_es <- venn.diagram(list(Mbovis_ES_GD = union(bovis_ess, bovis_gd), Butler_ES_GD = union(butler_ess, butler_gd) ), 
+                        filename = here("in_vitro_data/images/bovis_butler_compare_venn.png"),
+                        print.mode = c("raw"),
+                        pattern = "Venn_2set_simple",
+                        disable.logging = T,
+                        scaled = T,
+                        cex = c(1),
+                        fill = c("magenta3", "darkblue"),
+                        cat.cex = c(1.2, 1.2),
+                        cat.just = list(c(0,-4), c(1,-4)),
+                        main = c("Comparison of Mbovis ES and GD gene calls with Butler et al, 2020"),
+                        #sub = c("Total number of ES calls in either genome = 574"),
+                        main.cex = c(1),
+                        sub.cex = c(0.8),
+                        main.fontfamily = "sans",
+                        sub.fontfamily = "sans",
+                        cat.fontfamily = "sans",
+                        fontfamily = "sans")
+
+venn_gd_es
+#tb and dejesus
+venn_dj <- venn.diagram(list(Mtb_ES = tb_ess, DeJesus_ES = dj_ess ), 
+                        filename = here("in_vitro_data/images/tb_dejesus_compare_venn.png"),
+                        print.mode = c("raw"),
+                        pattern = "Venn_2set_simple",
+                        disable.logging = T,
+                        scaled = T,
+                        cex = c(1),
+                        fill = c("lightgreen", "darkgreen"),
+                        cat.cex = c(1.2, 1.2),
+                        cat.just = list(c(0,-4), c(1,-4)),
+                        main = c("Comparison of Mtb ES genes with DeJesus et al, 2017" ),
+                        main.cex = c(1),
+                        sub.cex = c(0.8),
+                        main.fontfamily = "sans",
+                        sub.fontfamily = "sans",
+                        cat.fontfamily = "sans",
+                        fontfamily = "sans")
+venn_dj
+
+venn_es_gd <- venn.diagram(list(Mtb_ES_GD = union(tb_ess, tb_gd), DeJesus_ES_GD = union(dj_ess, dj_gd) ), 
+                        filename = here("in_vitro_data/images/tb_dejesus_compare_esgd_venn.png"),
+                        print.mode = c("raw"),
+                        pattern = "Venn_2set_simple",
+                        disable.logging = T,
+                        scaled = T,
+                        cex = c(1),
+                        fill = c("lightgreen", "darkgreen"),
+                        cat.cex = c(1.2, 1.2),
+                        cat.just = list(c(0,-4), c(1,-4)),
+                        main = c("Comparison of Mtb ES/GD genes with DeJesus et al, 2017" ),
+                        main.cex = c(1),
+                        sub.cex = c(0.8),
+                        main.fontfamily = "sans",
+                        sub.fontfamily = "sans",
+                        cat.fontfamily = "sans",
+                        fontfamily = "sans")
+venn_es_gd
+
+patil_es_venn <- venn.diagram(list(Patil_ES = pat_ess, Mtb_ES = tb_ess ), 
+                        filename = here("in_vitro_data/images/tb_patil_compare_es_venn.png"),
+                        print.mode = c("raw"),
+                        pattern = "Venn_2set_simple",
+                        disable.logging = T,
+                        scaled = T,
+                        cex = c(1),
+                        fill = c("lightgreen", "darkgreen"),
+                        cat.cex = c(1, 1),
+                        #cat.dist = c(1),
+                        #cat.pos = c(2, 10),
+                        #cat.just = list(c(0,-10), c(1,-6)),
+                        #margin = c(0.05),
+                        main = c("Comparison of Mtb ES genes with Patil et al, 2020" ),
+                        main.cex = c(1),
+                        sub.cex = c(0.8),
+                        main.fontfamily = "sans",
+                        sub.fontfamily = "sans",
+                        cat.fontfamily = "sans",
+                        fontfamily = "sans")
+patil_es_venn
+
+
+#3 way with djesus and patil
+venn_3 <- venn.diagram(list(Patil_ES = pat_ess, Mtb_ES = tb_ess, DeJesus_ES = dj_ess ),
+                       filename = here("in_vitro_data/images/tb_3set_compare_es_venn.png"),
+                        print.mode = c("raw"),
+                        euler.d = TRUE,
+                        pattern = "Euler_3set_simple",
+                        disable.logging = T,
+                        scaled = T,
+                        cex = c(1),
+                        fill = c("green", "red", "yellow"),
+                        cat.cex = c(1, 1, 1),
+                        #cat.dist = c(1),
+                        #cat.pos = c(2, 10),
+                        #cat.just = list(c(0,-10), c(1,-6)),
+                        #margin = c(0.05),
+                        #main = c("Comparison of Mtb ES genes with two published datasets" ),
+                        main.cex = c(1),
+                        #sub.cex = c(0.8),
+                        main.fontfamily = "sans",
+                        sub.fontfamily = "sans",
+                        cat.fontfamily = "sans",
+                        fontfamily = "sans")
+venn_3
+
+# venn.plot <- venn.diagram(list(
+#   Mbovis_ES = bovis_ess, Butler_ES = butler_ess, Mbovis_GD=bovis_gd, Butler_GD = butler_gd), 
+#                           filename = here("in_vitro_data/images/venn_ess_gd.png"),
+#   print.mode = c("raw"),                        
+#   disable.logging=T,
+#   scaled = T,
+#   cex = c(1.2),
+#   fill=c("magenta2", "blue", "darkmagenta", "lightskyblue"),
+#   #alpha = c(0.5,0.3, ),
+#   cat.cex = c(1.2, 1.2, 1.2, 1.2),
+#   #cat.just = list(c(0,-4), c(1,-4)),
+#   main = c("Comparison of essential and growth defect genes"),
+#   main.cex = c(1.5),
+#   main.fontfamily = "sans",
+#   cat.fontfamily = "sans",
+#   fontfamily = "sans"
+# )
+# venn.plot
+
+#don't like zeros in spaces--too complicated. maybe try different package
+
+euler.plot <- euler(
+  c("Butler_ES" = length(setdiff(setdiff(butler_ess, bovis_ess), bovis_gd)),
+    "Mbovis_ES" = length(setdiff(setdiff(bovis_ess, butler_ess), butler_gd)), 
+    "Butler_GD" = length(setdiff(setdiff(butler_gd, bovis_gd), bovis_ess)),
+    "Mbovis_GD" =length(setdiff(setdiff(bovis_gd, butler_gd), butler_ess)),
+    "Butler_ES&Mbovis_ES" = length(intersect(bovis_ess, butler_ess)), #a and b
+    "Butler_ES&Mbovis_GD" = length(intersect(bovis_gd, butler_ess)), #a and d
+    "Butler_GD&MBovis_ES" = length(intersect(bovis_ess, butler_gd)), # c and b
+    "Butler_GD&Mbovis_GD" = length(intersect(bovis_gd, butler_gd))   #c and d
+    ),
+  shape = "ellipse"
+)
+plot(euler.plot, 
+     quantities = list(type = c("counts")))
+
+
+```
+
+
+how many of the dejesus mtb genes were GA? how many in butler?
+
+```{r growth_adv_compare}
+library(dplyr)
+library(exact2x2)
+
+all_res <- readRDS(here("in_vitro_data/R_data/resamp_res_final_x10.RData"))
+
+all_res %>% filter(bovis_call =="GA")
+#115
+
+all_res %>% filter(tb_call=="GA")
+#1
+
+all_res %>% filter(Mtb_dejesus == "GA")
+#244
+
+all_res %>% filter(Mbovis_butler == "GA")
+#2
+
+#saturation of butler
+total_ta = 73536
+butler_ta = 43000
+butler_ta/total_ta
+#58%
+
+#are GA genes in bovis enriched for any functional categories?
+data_fc <- readRDS(here("in_vitro_data/R_data/functional_cat_df.RData"))
+bovis_ga <- data_fc %>% filter(bovis_call =="GA")
+bovis_es <- data_fc %>% filter(bovis_call == "ES")
+bovis_gd <- data_fc %>% filter(bovis_call == "GD")
+bovis_esgd <- data_fc %>% filter(bovis_call %in% c("GD","ES"))
+
+#how many functional cats and how much of each?
+data_tally <- data_fc %>% group_by(Functional_Category) %>% summarise(num_genes = dplyr::n())
+ga_tally  <- bovis_ga %>% group_by(Functional_Category) %>% summarise(ga = dplyr::n())
+es_tally  <- bovis_es %>% group_by(Functional_Category) %>% summarise(es = dplyr::n())
+gd_tally  <- bovis_gd %>% group_by(Functional_Category) %>% summarise(gd = dplyr::n())
+es_gd_tally <- bovis_esgd %>% group_by(Functional_Category) %>% summarise(esgd = dplyr::n())
+
+fc_tally <- left_join(data_tally, ga_tally, by="Functional_Category")
+fc_tally$ga[is.na(fc_tally$ga)] <- 0
+fc_tally <- left_join(fc_tally, es_tally, by="Functional_Category")
+fc_tally$es[is.na(fc_tally$es)] <- 0
+fc_tally <- left_join(fc_tally, gd_tally, by="Functional_Category")
+fc_tally$gd[is.na(fc_tally$gd)] <- 0
+fc_tally <- left_join(fc_tally, es_gd_tally, by="Functional_Category")
+fc_tally$esgd[is.na(fc_tally$esgd)] <- 0
+
+funcats <- unique(fc_tally$Functional_Category)
+
+enrich_df <- tibble(fc = funcats, enrich = "")
+for (i in 1:10){
+  # make contingency table
+  #x<- essential in_cat, all other genes in category
+  # choose column (call)
+  my_col <- "ga" 
+  my_cat <- funcats[i]
+  col_cats <- fc_tally %>% filter(Functional_Category == my_cat) %>% 
+    select(all_of(my_col)) %>% pull()
+  #col_cats <- fc_tally$es[fc_tally$Functional_Category == my_cat]
+  other_cats  <- fc_tally$num_genes[fc_tally$Functional_Category == my_cat] - col_cats
+  #y<- essential_not_in category, ne genes _not_in category
+  #col_noncats <- sum(fc_tally$num_ga_genes[fc_tally$Functional_Category != my_cat])
+  col_noncats    <- sum(fc_tally %>% filter(Functional_Category != my_cat) %>% pull())
+  other_noncats  <- sum(fc_tally$num_genes[fc_tally$Functional_Category != my_cat])-col_noncats
+
+  x <- c(col_cats, other_cats)
+  y <- c(col_noncats, other_noncats)
+  test_data <- rbind(x,y)
+
+  mp<- exact2x2(test_data, alternative="greater", midp=TRUE)
+  #print(mp$p.value)
+  enrich_df$enrich[i] <- mp$p.value
+}
+#correct for multiple testing
+enrich_df <- enrich_df %>% mutate(adj_pvalue = p.adjust(enrich, method="BH"))
+
+enrich_df
+```
+
+GA genes in mbovis are not enriched for any particular category
+Mbovis ES genes enriched for information pathways and intermediary metabolism, just like ES genes shared with Mtb. GD alone not enriched for any category. ES/GD genes together also enriched for these categories.
+
+
+Look at differences/similarities in the orthologous genes that have different lengths. (the ones from malone et al that did not get included in the blast ortholog set)
+
+
+```{r non_blast_orthologs}
+library(tidyverse)
+
+#results with malone
+mal_orthos <- readRDS( here("in_vitro_data/R_data/sorted_comp_calls_19_10_23.RData"))
+
+#set of blast orthologs
+blast_orthos<- readRDS(here("in_vitro_data/R_data/blast_orthologs_complete.RData"))
+nrow(blast_orthos)
+
+#set of malone orthos that aren't in blast orthologs
+diff_orfs <- mal_orthos[!mal_orthos$tb_orf %in% blast_orthos$tb_orf,]
+nrow(diff_orfs)
+#422
+
+#are all of these variable aa seq?
+diff_orfs %>% filter(`v/i` == "Variable") %>% distinct(tb_orf)
+#268
+
+#identical protein seqs
+identical_protein_orfs <- diff_orfs %>% filter(`v/i` == "Identical")
+nrow(identical_protein_orfs %>% distinct(tb_orf)) #87
+identical_protein_orfs %>% filter(tb_call==bovis_call) %>% distinct(tb_orf)
+#84 same call
+
+#how many with same call
+diff_orfs %>% filter(tb_call==bovis_call) %>% group_by(bovis_call) %>% summarise(n=n())
+# 378 have same call, 367 of these are NE, 7 are ES
+# 378/422 #90% of these have same call
+diff_orfs %>% filter(tb_call!=bovis_call)
+# 44 with diff calls
+
+diff_orfs %>% filter(tb_call!=bovis_call) %>% filter(grepl("PE", gene) | grepl("PPE", gene)) %>% filter(tb_call=="ES")
+
+#GA bovis
+diff_orfs %>% filter(tb_call!=bovis_call & bovis_call=="GA")
+#8 pairs, all are NE in tb, but only 6 different tb genes as gene split in two for bovis
+
+#ES in bovis
+diff_orfs %>% filter(tb_call!=bovis_call & bovis_call == "ES")
+#6, but 5 different bovis genes
+
+
+```
+
+Variable genes ES in bovis but not in TB:
+
+Mb3293c/Rv3265c/wbbL1, ES vs GD, 'variable' how does this align? missing TA sites/length? interestingly, tho ES in bovis, saw attenuation in vivo. This might indicate false positive as some surviving clones with insertions were present in in vivo passaged library. (no difference detected with resampling)
+(wbbL2 is identical in bovis and tb but see attenuation in mbovis in menadione)
+
+two PE_PGRS (13 and 54) genes which are variable are ES in bovis and NE in tb (Rv0833 and Rv3508). 
+
+In the paper wag31 is explored. This is Rv2145 and called 'NE' in Mtb, but Mb2169 is called ES in Mbovis. Both genes have insertions ONLY in the first TA site in the gene. But the context of the Mbovis one is slightly different with more insertions in 3' end of Rv2144/Mb2168 and intergenic space before wag31 than Mtb:
+
+>2389064	0	6.45e-17 	2.87e-19 	9.98e-01 	1.51e-03 	NE	
+2389091	90	7.67e-197	4.05e-25 	9.98e-01 	1.74e-03 	NE	Mb2168c_( -)
+2389123	0	6.08e-19 	1.01e-19 	9.98e-01 	1.51e-03 	NE	Mb2168c_( -)
+2389226	0	6.08e-19 	1.01e-19 	9.98e-01 	1.51e-03 	NE	Mb2168c_( -)
+2389357	328	0.00e+00 	4.93e-41 	9.97e-01 	2.53e-03 	NE	Mb2168c_( -)
+2389369	182	0.00e+00 	1.66e-38 	9.98e-01 	2.01e-03 	NE	Mb2168c_( -)
+2389466	26	5.95e-78 	4.44e-28 	9.98e-01 	1.58e-03 	NE	
+2389485	827	0.00e+00 	4.15e-80 	9.94e-01 	5.51e-03 	NE	
+2389542	213	0.00e+00 	2.14e-33 	9.98e-01 	2.11e-03 	NE	Mb2169c_( wag31)
+2389647	0	9.98e-01 	2.69e-10 	1.96e-03 	2.97e-06 	ES	Mb2169c_( wag31)
+2389668	0	1.00e+00 	2.73e-10 	3.88e-06 	1.17e-09 	ES	Mb2169c_( wag31)
+
+>2404139	0	3.73e-31 	1.27e-33 	1.00e+00 	1.77e-29 	NE	
+2404166	961	0.00e+00 	1.79e-99 	1.00e+00 	3.17e-28 	NE	Rv2144c_()
+2404198	0	4.20e-31 	2.26e-15 	1.00e+00 	1.08e-28 	NE	Rv2144c_()
+2404301	0	4.20e-31 	2.30e-15 	1.00e+00 	3.33e-28 	NE	Rv2144c_()
+2404432	42	4.51e-115	3.04e-18 	1.00e+00 	1.57e-27 	NE	Rv2144c_()
+2404444	8	3.68e-52 	6.51e-16 	1.00e+00 	6.80e-27 	NE	Rv2144c_()
+2404541	0	7.90e-34 	2.30e-15 	1.00e+00 	3.26e-26 	NE	
+2404560	42	8.63e-118	3.05e-18 	1.00e+00 	1.74e-25 	NE	
+2404617	127	2.20e-290	4.58e-24 	1.00e+00 	9.47e-25 	NE	Rv2145c_(wag31)
+2404722	0	8.82e-02 	2.45e-13 	9.12e-01 	2.92e-24 	NE	Rv2145c_(wag31)
+2404743	0	8.84e-02 	2.48e-13 	9.12e-01 	5.94e-27 	NE	Rv2145c_(wag31)
+2404759	0	8.84e-02 	2.48e-13 	9.12e-01 	1.25e-29 	NE	Rv2145c_(wag31)
+
+Presumably, this changes the probability of the subsequent TA sites in Mtb to be less likely to change state to ES than in bovis. This makes resampling look a bit more rigorous for making comparisons.
+
+```{r bubble plot wag31}
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(dplyr)
+
+mbov_ins <- read.delim(here("in_vitro_data/hmm_bovis_new_add_19_21.wig"), 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#', col.names = c("site", "insertions", "prob_ES", "prob_GD", "prob_NE", "prob_GA", "call", "gene"))
+mtb_ins <- read.delim(here("in_vitro_data/hmm_mtb_new_add_22_23.wig"), 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#', col.names = c("site", "insertions", "prob_ES", "prob_GD", "prob_NE", "prob_GA", "call", "gene"))
+
+#24 rows
+
+mtb_wag <- mtb_ins %>% 
+  filter(site %in% 2404166:2405521)%>% 
+  select(insertions, call, gene) %>%
+  mutate(ta_number = c(1:24), strain="Mtb")
+mtb_wag
+mb_wag <- mbov_ins %>% 
+  filter(site %in% 2389091:2390446) %>% 
+  select(insertions, call) %>%
+  mutate(ta_number = c(1:24), strain="MBovis", gene = mtb_wag$gene)
+mb_wag
+#plot_df <- full_join(mb_wag, mtb_wag, by="ta_number", suffix = c(".bovis", ".tb")) 
+plot_df <- rbind(mb_wag, mtb_wag) 
+
+strain_cols <- c("MBovis" = "blue", "Mtb" = "darkgreen")
+  ggplot(plot_df, aes(colour=strain)) +
+  geom_jitter(aes(x=ta_number, y=insertions, shape = call), size=6, alpha=0.8) +
+  scale_color_manual(values=strain_cols) +
+  guides(fill=guide_legend(title="insertions"), size=FALSE) +
+  coord_cartesian(xlim=c(0,24), ylim=c(-60,600), clip="off") +
+  annotate("rect", xmin = 1, xmax = 5, ymin = -40, ymax = -25, fill = "gray") +
+  annotate("rect", xmin = 8, xmax = 19, ymin = -40, ymax = -25, fill = "gray") +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 12)) +
+  ylab(c("Insertions"))
+Text1 <- textGrob("Rv2144c")
+Text2 <- textGrob("wag31")
+(g1 <- pl + annotation_custom(grob = Text1,  xmin = 1, xmax = 5, ymin = -60, ymax = -60) +
+annotation_custom(grob = Text3,  xmin = 8, xmax = 19, ymin = -60, ymax = -60))
+gg_table <- ggplot_gtable(ggplot_build(g1))
+gg_table$layout$clip[gg_table$layout$name=="panel"] <- "off"
+grid.draw(gg_table)
+
+g <- arrangeGrob(gg_table)
+ggsave <- ggplot2::ggsave
+body(ggsave) <- body(ggplot2::ggsave)[-2]
+ggsave(file=here("in_vitro_data/images/wag31.png"), g, width = 10)
+
+```
+
+
+
+```{r insertion_plot_function}
+
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(dplyr)
+
+#read in insertions
+mbov_ins <- read.delim(here("in_vitro_data/hmm_bovis_new_add_19_21.wig"), 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#', col.names = c("site", "insertions", "prob_ES", "prob_GD", "prob_NE", "prob_GA", "call", "gene"))
+mtb_ins <- read.delim(here("in_vitro_data/hmm_mtb_new_add_22_23.wig"), 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#', col.names = c("site", "insertions", "prob_ES", "prob_GD", "prob_NE", "prob_GA", "call", "gene"))
+
+find_ranges <- function(mbi, mtbi, mtb_i, mtb_ii, mb_i, mb_ii){
+    #find insertion range of interest
+    mtb_range <- mtbi %>% 
+    filter(site %in% mtb_i:mtb_ii)%>% 
+    select(insertions, call, gene) %>%
+    mutate(ta_number = c(1:nrow(.)), strain="Mtb")
+    mb_range <- mbi %>% 
+    filter(site %in% mb_i:mb_ii) %>% 
+    select(insertions, call) %>%
+    mutate(ta_number = c(1:nrow(.)), strain="MBovis", gene = mtb_range$gene)
+    range_df <- rbind(mb_range, mtb_range) 
+  return(range_df)
+}
+
+test <- find_ranges(mbov_ins, mtb_ins, 2489040, 2493754, 2472598, 2477326 )
+
+
+#function to annotate genes
+add_lines <- function(gene_i, gene_ta_df){
+  x_min <- min(gene_ta_df %>% 
+                          filter(gene==gene_i) %>% select(ta_number))
+  x_max <- max(gene_ta_df %>% 
+                          filter(gene==gene_i) %>% select(ta_number))
+  annotate("rect", 
+             xmin = x_min, xmax = x_max,  
+             ymin = -55, ymax = -35, fill = "gray") 
+}
+
+x <- add_lines("Rv2221c_(glnE)", test)
+
+add_text <- function(gene_i, gene_ta_df){
+  x_min <- min(gene_ta_df %>% 
+                          filter(gene==gene_i) %>% select(ta_number))
+  x_max <- max(gene_ta_df %>% 
+                          filter(gene==gene_i) %>% select(ta_number))
+  #annotation_custom(grob = textGrob(sub("_.*", "", gene_i)),
+  annotation_custom(grob = textGrob(gene_i),
+                    xmin = x_min, xmax = x_max, 
+                    ymin = -80, ymax = -80)
+}
+
+y <- add_text("Rv2221c_(glnE)", test)
+
+insertion_plot <- function(mbovis_insertions, mtb_insertions, mtb_start, mtb_end, mbovis_start, mbovis_end){
+  require(ggplot2)
+  require(dplyr)
+  require(grid)
+  require(gridExtra)
+  
+  pl_df <- find_ranges(mbovis_insertions, mtb_insertions, 
+                         mtb_start, mtb_end, mbovis_start, mbovis_end)
+  genes <- pl_df %>% filter(gene != "") %>% distinct(gene) %>% pull()
+  no_genes <- length(genes)
+  total_tas <- nrow(pl_df %>% filter(strain=="Mtb"))
+  gene_tas <- pl_df %>% filter(gene %in% genes & strain=="Mtb")
+  strain_cols <- c("MBovis" = "blue", "Mtb" = "darkgreen")
+  lines <- lapply(genes, add_lines, pl_df)
+  gene_text <- lapply(genes, add_text, pl_df)
+  pl <- ggplot(pl_df, aes(colour=strain)) +
+  geom_jitter(aes(x=ta_number, y=insertions, shape = call), size=4, alpha=0.8) +
+  scale_color_manual(values=strain_cols) +
+  guides(fill=guide_legend(title="insertions"), size=FALSE) +
+  coord_cartesian(xlim=c(0, total_tas), 
+                  ylim=c(-80,max(pl_df$insertions)), clip="off") +
+  lines + 
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 12),
+        axis.title = element_text(size = 12),
+        axis.text.y = element_text(size = 12)) +
+  ylab(c("Insertions")) +
+  xlab(c("TA site position"))
+  gg_pl <- pl + gene_text
+  return(gg_pl)
+}
+
+#test for glnA1,glnE,glnA2
+
+gln <- insertion_plot(mbov_ins, mtb_ins, 2489073, 2493754, 2472631, 2477326)
+gln
+
+rv0812 <- insertion_plot(mbov_ins, mtb_ins, 906391, 908029, 907181, 908859)
+rv0812
+
+ggsave(file=here("in_vitro_data/images/glnA2.png"), gln, width = 10)
+
+
+```
+
+Rv2182c was tested with crispri in the paper and there was some phenotype with the Mbovis being less affected than the Mtb. Both were predicted to be essential and there were no insertions in either genome. The gene preceding this was NE in both Mbovis and Mtb. So resampling obviously shows no difference. The fact both CRISPRi strains show impairment seems to confirm that the gene is essential--maybe it is just 'more' essential in Mtb but that could be beyond the sensitivity of this method in these datasets.
+
+As mentioned earlier, for Rv3487c/Mb3517c which are 'identical' in Malone study but show 297bp difference in length:
+
+>Mb3517c, lipF, len: 376 aa. Equivalent to esterase/lipase lipF from Mycobacterium bovis BCG strain Korea 1168P (100% identity with 375 aa overlap). 5' extension to annotation based on de novo proteomics of Mycobacterium tuberculosis strain H37Rv under exponential conditions.
+
+Would only want to look at region that aligns exactly, or with high % identity in which case need to verify the same number of TA sites.
+
+Make insertion plots to see how entire region aligns (the bigger region in Mbovis annotation)
+
+```{r lipF}
+#use insertion plot functions to visualise insertions in this whole gene
+library(dplyr)
+source(here("scripts/insertion_plots.R"))
+
+mbov_ins <- read.delim(here("in_vitro_data/hmm_bovis_new_add_19_21.wig"), 
+                       sep="\t", header=FALSE, stringsAsFactors=F, 
+                       comment.char = '#', col.names = c("site", "insertions", "prob_ES", "prob_GD", "prob_NE", "prob_GA", "call", "gene"))
+mtb_ins <- read.delim(here("in_vitro_data/hmm_mtb_new_add_22_23.wig"), 
+                      sep="\t", header=FALSE, stringsAsFactors=F, 
+                      comment.char = '#', col.names = c("site", "insertions", "prob_ES", "prob_GD", "prob_NE", "prob_GA", "call", "gene"))
+
+# part in common between two genome annotations
+#3906175-3906955, 3856211-3856991
+# first part (5' end) of genes which are only annotated for mbovis 
+#3907019, 3907285, 3857055, 3857321
+#find_ranges(mbov_ins, mtb_ins, 3906175, 3907285, 3856211, 3857321)
+
+insertion_plot(mbov_ins, mtb_ins, 3907019, 3907285, 3857055, 3857321)
+
+```
+second half of gene (part annotated for both mtb and mbovis, both have a lot of insertions). The first two TA sites in 5' Mbovis only annotation have 0-1 insertions in either.
+
+
+
+
+Make a heatmap of genes involved in cell wall lipids that are changed (resampling only). Not very informative.
+
+
+```{r cell wall heatmap}
+library(dplyr)
+library(ggplot2)
+library(colorspace)
+
+genes_changed <- readRDS(here("invitro_data/resampling_131123/resamp_changed_genes_winz_x10.csv"))
+
+my_genes <- c("Rv2940c", "Rv0642c", "Rv0643c", "Rv3497c", "Rv0244c", "Rv3682", "Rv0016c", "Rv3490", "Rv0812")
+
+x_dummy <- c("fold change")
+my_cols <- diverging_hcl(length(my_genes), palette = "Blue-Red")
+
+pl_data <- genes_changed %>% mutate(gene_locus = paste(Orf, bovis_orf, sep="/"))
+
+ggplot(pl_data %>% filter(Orf %in% my_genes), aes(x=1, y= reorder(gene_locus, -log2FC), fill=log2FC)) +
+  geom_tile()+ 
+  geom_text(aes(x = 1, y = reorder(gene_locus, -log2FC), label = log2FC), size=4, fontface="bold") +
+  scale_fill_continuous_diverging(palette = "Blue-Red", name="Log2FC", trans="reverse") +
+  #coord_cartesian(xlim=c(1, 1), ylim=c(0, length(my_genes))) +
+  #theme(axis.text.y = element_text(size=6, face="bold", colour = sig_cols),
+  theme(axis.text.y = element_text(size=10, face="bold"),
+        axis.ticks = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank()) 
+  #scale_x_discrete(labels=axis_names) +
+  #ylab("M.bovis/M.tb locus")
+
+ggplot(genes_changed, )
+
+
+ggsave(here("in_vitro_data/images/cell_wall_genes.png"), height = 8, width=4) 
+
+```
+
+Spreadsheet of calls
+
+
+```{r variable_orthologs}
+library(dplyr)
+
+#orthologous genes within min length difference and <2 TA site numbers different
+
+orthologs <- readRDS(here("in_vitro_data/R_data/blast_orthologs_complete.RData"))
+
+var_orthos <- orthologs %>% filter(snps == "variable")
+nrow(var_orthos)
+#1268
+
+diff_calls_var <- var_orthos %>% filter(bovis_call != tb_call)
+#191
+diff_calls_var %>% filter(bovis_call=="GA")
+#46 are GA for bovis, all but one (Mb1040/Rv1012=GD) NE for tb
+
+diff_calls_var %>% filter(bovis_call=="ES" & tb_call=="NE")
+#34 have SNPs that may make gene essential in bovis (same number of TA sites)
+diff_calls_var %>% filter(tb_call=="ES" & bovis_call=="NE")
+#22 SNPS that may make non-essential in bovis
+
+#variable genes with same calls
+var_orthos %>% filter(bovis_call==tb_call)
+#1075
+
+#variable essentials in both
+var_orthos %>% filter(bovis_call=="ES" & tb_call=="ES")
+#129
+
+
+```
+sigB has snps in bovis and it is ES in bovis and NE in tb
+otsA, alpha-trehalose-phosphate synthase also ES in bovis but NE in tb and has snps (menadione?)
+
+
+```{r all HMM results}
+
+library(dplyr)
+
+data <- read_excel(here("data/Gibson et al_Supplementary table S1a final.xlsx"))
+
+write_excel_csv(data, here("in_vitro_data/supplemental_tables/final_HMM_results_231123.csv"), col_names = T)
+
+```
+
+
+19 December 2023
+
+Make calls of tb and bovis orthologous ncRNA sequences
+
+Use R data files generated in ncrna_orthologs.Rmd which have 253 Mtb ncRNAs and 157 that are in Mtb and bovis that have all been shortened to 200 nt to make sure they don't overlap any coding genes.
+
+Substitute names of ncrna for 'EBG' number which isn't that helpful
+
+```{r rename_annotated_ncrnas}
+library(dplyr)
+ann_ncrnas <- readRDS(here("in_vitro_data/R_data/annot_ncrna.RData"))
+bovis_ncrnas <- readRDS(here("in_vitro_data/R_data/bovis_ncrna_orthos.RData"))
+tb_ncrnas <- readRDS(here("in_vitro_data/R_data/short_ncrna_orthos.RData"))
+
+for (i in 1:nrow(bovis_ncrnas)){
+  if (grepl("EBG", bovis_ncrnas$tb_id[i])==T){
+    ebg_name <- bovis_ncrnas$tb_id[i]
+    name <- ann_ncrnas %>% 
+      filter(ID==ebg_name) %>% 
+      select(Name) %>%
+      pull()
+    locus <- ann_ncrnas %>% 
+      filter(ID==ebg_name) %>% 
+      select(locus_ID) %>%
+      pull()
+    bovis_ncrnas$tb_id[i] <- paste(name, locus, sep="/")
+  }
+}
+saveRDS(bovis_ncrnas, here("in_vitro_data/R_data/bovis_ncrna_orthos.RData"))
+
+#how many annotated ncrnas
+nrow(bovis_ncrnas %>% filter(!grepl("putative", tb_id)))
+#7
+
+for (i in 1:nrow(tb_ncrnas)){
+  if (grepl("EBG", tb_ncrnas$locus_ID[i])==T){
+    ebg_name <- tb_ncrnas$locus_ID[i]
+    name <- ann_ncrnas %>% 
+      filter(ID==ebg_name) %>% 
+      select(Name) %>%
+      pull()
+    locus <- ann_ncrnas %>% 
+      filter(ID==ebg_name) %>% 
+      select(locus_ID) %>%
+      pull()
+    tb_ncrnas$locus_ID[i] <- paste(name, locus, sep="/")
+  }
+}
+
+nrow(tb_ncrnas %>% filter(!grepl("putative", locus_ID)))
+#8
+
+saveRDS(tb_ncrnas, here("in_vitro_data/R_data/short_ncrna_orthos.RData"))
+```
+
+
+Find all TA sites within feature boundary and make call based on majority of TA sites. Only consider features with >2 TA sites
+
+```{r assign_TA_calls}
+library(dplyr)
+
+tb_ncrnas <- readRDS(here("in_vitro_data/R_data/short_ncrna_orthos.RData"))
+bovis_ncrnas <- readRDS(here("in_vitro_data/R_data/bovis_ncrna_orthos.RData"))
+#ta sites
+hmm_bovis <- read_tsv(here("in_vitro_data/hmm_bovis_new_add_19_21.wig"), skip=18, col_names = F)
+colnames(hmm_bovis) <- c("ta_site", "insertions", "ES", "GD", "NE", "GA", "call", "gene")
+#keep only first orf name
+hmm_bovis <- hmm_bovis %>%
+  mutate(gene = sub( "_.*" , "", gene))
+
+hmm_tb <- read_tsv(here("in_vitro_data/hmm_mtb_new_add_22_23.wig"), skip=18, col_names = F)
+colnames(hmm_tb) <- c("ta_site", "insertions", "ES", "GD", "NE", "GA", "call", "gene")
+hmm_tb <- hmm_tb %>%
+  mutate(gene = sub( "_.*" , "", gene))
+
+tb_orthos <- tb_ncrnas %>% filter(locus_ID %in% bovis_ncrnas$tb_id)
+
+#Need to consider it is choosing only the 'first' max. 
+#test_df <- tibble(gene = c(1:5), call = c("NE", "NE", "ES","ES", "GD"))
+# test_df <- tibble(gene = c(1:3), call = c("NE", "NE", "GD"))
+# paste(test_df %>% dplyr::count(call) %>%
+# mutate(max = max(n)) %>%                     
+# subset(n == max(n)) %>% 
+# select(call) %>% pull(), collapse="/")
+
+#tb calls
+no_insertions <- NULL
+feature_call <- NULL
+for (i in 1:nrow(tb_ncrnas)){
+  ta_df <- hmm_tb %>% 
+    filter(ta_site >= tb_ncrnas$start[i] & ta_site <= tb_ncrnas$end[i])
+  if (nrow(ta_df) != 0){
+    n_ins     <- nrow(ta_df)
+    f_call = paste(ta_df %>% dplyr::count(call) %>%
+                   mutate(max = max(n)) %>%
+                   subset(n == max(n)) %>% 
+                   select(call) %>% pull(), 
+                 collapse="/")
+        #ta_df %>% 
+        #dplyr::count(call) #%>% 
+        #dplyr::slice(which.max(n)) #%>% #this is first max
+        #select(call) %>% pull()
+  }else{
+    n_ins = 0
+    f_call = NA
+  }
+  no_insertions <- c(no_insertions, n_ins)
+  feature_call <- c(feature_call, f_call)
+}
+tb_ncrnas <- tb_ncrnas %>% mutate(n_TAs = no_insertions, 
+                                  call = feature_call)
+saveRDS(tb_ncrnas, here())
+#bovis calls
+no_insertions <- NULL
+feature_call <- NULL
+for (i in 1:nrow(bovis_ncrnas)){
+  ta_df <- hmm_bovis %>% 
+    filter(ta_site >= bovis_ncrnas$start[i] & 
+             ta_site <= bovis_ncrnas$end[i])
+  if (nrow(ta_df) != 0){
+    n_ins <-  nrow(ta_df)
+    f_call = paste(ta_df %>% dplyr::count(call) %>%
+                   mutate(max = max(n)) %>%
+                   subset(n == max(n)) %>% 
+                   select(call) %>% pull(), 
+                 collapse="/")
+  }else{
+    n_ins = 0
+    f_call = NA
+  }
+  no_insertions <- c(no_insertions, n_ins)
+  feature_call <- c(feature_call, f_call)
+}
+bovis_ncrnas <- bovis_ncrnas %>% mutate(n_TAs = no_insertions, 
+                                  call = feature_call)
+
+ortho_ncrnas_calls <- left_join(bovis_ncrnas, tb_ncrnas, by = c("tb_id" = "locus_ID"), suffix = c(".bovis", ".tb"), multiple = "all", relationship = "many-to-one")
+ortho_ncrnas_calls <- ortho_ncrnas_calls %>% mutate(width.tb = end.tb - start.tb, width.bovis = end.bovis - start.bovis)
+saveRDS(ortho_ncrnas_calls, here("in_vitro_data/R_data/ortho_ncrna_calls.RData"))
+
+#write spreadsheet
+write_csv(ortho_ncrnas_calls, here("in_vitro_data/thesis_output/ncrna_orthologs.csv"))
+```
+
+
+```{r analysis of ncrna orthos}
+library(dplyr)
+ortho_ncrna_calls <- readRDS(here("in_vitro_data/R_data/ortho_ncrna_calls.RData"))
+#tb_ncrnas <- readRDS(here("in_vitro_data/R_data/short_ncrna_orthos.RData"))
+#bovis_ncrnas <- readRDS(here("in_vitro_data/R_data/bovis_ncrna_orthos.RData"))
+
+#how many ES in each?
+nrow(ortho_ncrna_calls %>% filter(call.bovis == "ES"))
+#8 8/157 (5%)
+nrow(ortho_ncrna_calls %>% filter(call.tb == "ES"))
+#8
+
+#ES in both
+nrow(ortho_ncrnas_calls %>% filter(call.bovis=="ES" & call.tb=="ES"))
+#3
+
+#ES or GD in both
+atten <- c("ES", "GD")
+nrow(ortho_ncrnas_calls %>% filter(call.bovis %in% atten & call.tb %in% atten))
+#9 are ES or GD in both
+
+#how many annotated srnas in both
+nrow(ortho_ncrnas_calls %>% filter(!grepl("putative", tb_id)))
+#7
+
+
+#with different ta sites
+nrow(ortho_ncrnas_calls %>% filter(n_TAs.bovis != n_TAs.tb))
+#even with diff ta sites, all are both NE (tho one in bovis has snp so 0 ta sites)
+
+ortho_ncrnas_calls %>% filter(call.bovis != call.tb & n_TAs.tb > 4) 
+# 15 with >2 sites have diff calls, including two annotated ones
+# only 2 ncrnas with greater than 4 ta sites and different calls (have 8 or 9 sites)
+
+#make table of those with different calls
+data <- ortho_ncrna_calls %>% filter(call.bovis != call.tb & n_TAs.bovis > 2)
+write_csv(data, here("in_vitro_data/thesis_output/different_ncrna_calls.csv"))
+
+```
+
+two annotated rnas are GD/ES in Mtb and NE in Mbovis
+MTS0858/ncRv1092c 3 sites, GD in tb, NE in Mbovis
+G2/ncRv11689c 4 sites, ES in tb, NE in Mbovis
+
+neither are statistically significantly different with resampling
+
+all but one with different calls have 4 or less TA sites. (restricted to 200bp)
+
+putative_sRNA:m3834596_3834735 may be interesting because has 8 TA sites and is GD in bovis but NE in tb
+
+big log2fold change but since not actually that many insertions in tb (45 v. 0), not statistically significant with resampling
+
+This sRNA comes between Rv3415c (hypothetical protein) and diverges in direction from promoter/5'utr of whiB3 (Rv3416). might be part of 5' utr for Rv3415c?
+
+Very low expression in both tb and bovis. Most likely the transposon is interfering with the promoter for Rv3415c or the 5' UTR which may be more essential in bovis than in TB? the promoter of whiB3 is identified by DeJesus et al as much closer to whiB3 than these TA sites (and non-essential in Mtb).
+
+Rv3415c is GA in Mbovis (NE in Mtb). Comes right before sigD (Rv3414c) so insertions could potentially interfere with promoter of this operon and sigD expression through polar effects?
+
+[sigD regulation](https://journals.asm.org/doi/full/10.1128/jb.186.19.6605-6616.2004?casa_token=qNY8_Rd42cIAAAAA%3APiadkrCoTg81la0dqS7HawQGtEeW23rZyhBAFUDPiHo-VlyxQPzqNLhsVv7dfdwn1W2MjGlW-Q3S)
+
+consensus located between Rv3415c and sigD 
+
+![sigD promoter](images/sigD_consensus.jpeg)
+
+hub in red (module enriched for sRNAs): ncRv13416c
+
+
+Look at insertions
+
+```{r}
+library(dplyr)
+source(here("scripts/insertion_plots.R"))
+#read in insertions
+mbov_ins <- read.delim(here("in_vitro_data/hmm_bovis_new_add_19_21.wig"), 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#', col.names = c("site", "insertions", "prob_ES", "prob_GD", "prob_NE", "prob_GA", "call", "gene"))
+mtb_ins <- read.delim(here("in_vitro_data/hmm_mtb_new_add_22_23.wig"), 
+                      sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#', col.names = c("site", "insertions", "prob_ES", "prob_GD", "prob_NE", "prob_GA", "call", "gene"))
+
+
+find_ranges <- function(mbi, mtbi, mtb_i, mtb_ii, mb_i, mb_ii){
+    #find insertion range of interest
+    mtb_range <- mtbi %>% 
+    filter(site %in% mtb_i:mtb_ii)%>% 
+    select(insertions, call, gene, site) %>%
+    mutate(ta_number = c(1:nrow(.)), strain="Mtb")
+    mb_range <- mbi %>% 
+    filter(site %in% mb_i:mb_ii) %>% 
+    select(insertions, call, site) %>%
+    mutate(ta_number = c(1:nrow(.)), strain="MBovis", gene = mtb_range$gene)
+    range_df <- rbind(mb_range, mtb_range) 
+  return(range_df)
+}
+
+test <- find_ranges(mbov_ins, mtb_ins, 3834596, 3835092, 3791637, 3792133)
+pl <- insertion_plot(mbov_ins, mtb_ins, 3834596, 3835092, 3791637, 3792133)
+
+
+test
+```
+
+ONly one site within the predicted ncrna allowed insertions in either genome. 3834708	in Mtb allowed 349 (7th TA site, out of 8). no insertions in bovis at this site. Insertions in promoter of whiB3 similar in both genomes. means of insertions not hugely different.
+
+Incidentally, these are TTR normalised insertions from HMM. using 'sum' instead of 'mean' insertions. resampling uses means
+
+![tb_ncrna_hypoxia](images/ncrna_whib3.png)
+Is this region identified by DeJesus? no
+
+put in rna-fold
+
+```{bash}
+conda activate rna
+cd ~/tn_seq/in_vitro_data
+RNAfold -p -d2 --noLP < putative_sRNAm3834596_3834735.fa > putative_sRNAm3834596_3834735_rnafold.txt
+
+```
+
+```
+>putative_sRNA:m3834596_3834735 putative_sRNA
+GCGCUAAUUUAGGCGUACUCACAGCAUGGGAUGACCUGGGCAAAUACCUCAUCUAUCCGCCCGGGAUAGCAUGCGGCGCAGGCGGCGAAUGCGGCGCAGAUGAACGCAGAGUUAAUUCUCACGCAACGGUCCGAUAUUGC
+(((((......))))).....(((.((.((((..(((((((..(((.......)))..)))))))......((((.((((.........)))).)))).......((.(((......)))..))....)))).)).))). (-40.90)
+(((((......))))).....{{(.((.((((..(((((((..{{{.......}}}..)))))))...,,,((((.(({{.,|..,...)))},}}},......}||.(((......)))..}}....)))).)).})). [-43.02]
+(((((......))))).....(((.((.((((..(((((((..(((.......)))..)))))))...........................................(((......)))........)))).)).))). {-25.70 d=19.60}
+ frequency of mfe structure in ensemble 0.0318761; ensemble diversity 30.43 
+ ```
+
+![rnafold structure](images/putative_sRNAm3834596_3834735_rnafold.pdf)
+
+ 
+
+The other srna that is GD in bovis and ES in tb, putative_sRNA:p2038697_2038955, is more highly expressed in Mbovis than in Mtb (at exponential and hypoxia). Coordinates in bovis look like around 2033503-2033719.
+
+![bovis_ncrna](images/bovis_ncrna_ecca5_lppT.png)
+What are calls for the genes around this ncrna? part of big ecc5 operon
+
+```{r calls for genes}
+orthologs <- readRDS(here("in_vitro_data/R_data/blast_orthologs_complete.RData"))
+
+ecc_operon <- c("Rv1790", "Rv1791", "Rv1792", "Rv1793", "Rv1794", "Rv1795", "Rv1796", "Rv1797", "Rv1798", "Rv1799", "Rv1800")
+orthologs %>% filter(tb_orf %in% ecc_operon) %>% select(-c(bovis_start, bovis_end, tb_start, tb_end, diff_gene_len, snps))
+
+```
+
+these two genes are both NE in both genomes. some other genes are different, Mb1822/Rv1794 espG5 is ES in bovis and NE in tb. Rv1795-97 are ES in bovis and GD in tb.
+
+None of these genes statistically different using resampling. No TSS for this srna and not a hub
+
+
+19 Jan
+
+Check the orthologous ncRNAs with resampling. make bovis on tb (tb is control, bovis coordinates with tb id's) compare with new tb ncrna prot table
+
+```{r make ncrna prot tables}
+library(dplyr)
+ortho_ncrnas_calls <- readRDS(here("in_vitro_data/R_data/ortho_ncrna_calls.RData"))
+#tb_id, start, end, strand, width, type, hmm_call, name, tb_id
+
+#are all widths the same? if not might cause problems, but they differ by only 1 typically
+
+tb_prot <- ortho_ncrnas_calls %>% 
+  select(start.tb, end.tb, strand.tb, width.tb, call.tb, tb_id) %>%
+  mutate(descr = "non-coding orthologs", type = "ncRNA", name = "intergenic") %>%
+  relocate(descr, .before=start.tb) %>%
+  relocate(tb_id, .after=name)
+
+write_tsv(tb_prot, here("in_vitro_data/ncrna_resample/tb_ncrna.prot_table"), col_names = F)
+
+bovis_tb_prot <- ortho_ncrnas_calls %>%
+  select(start.bovis, end.bovis, strand.bovis, width.bovis, call.bovis, tb_id) %>%
+  mutate(descr = "bovis ncRNA orthologs", type = "ncRNA", name = "intergenic") %>%
+  relocate(descr, .before=start.bovis) %>% 
+  relocate(tb_id, .after=name)
+write_tsv(bovis_tb_prot, here("in_vitro_data/ncrna_resample/bovis_on_tb_ncrna.prot_table"), col_names = F)
+
+```
+
+Use same parameters as with coding genes: winzorisation, pc=5, 100000 permutations, mean vs sum
+
+```
+transit resampling mtb_hiseq/TPP/mtb22_hiseq_tpp.wig,mtb_hiseq/TPP/mtb23_hiseq_tpp.wig bovis_hiseq/tpp/bovis_hiseq_tpp_19.wig,bovis_hiseq/tpp/bovis_hiseq_tpp_21.wig ncrna_resample/tb_ncrna.prot_table,ncrna_resample/bovis_on_tb_ncrna.prot_table ncrna_resample/bovis_on_tb_resamp_ncrna.txt -winz -PC 5 -s 100000
+```
+```{r ncrna_resamp_results}
+res <- read_delim(
+  here("in_vitro_data/ncrna_resample/bovis_on_tb_resamp_ncrna.txt"),
+                  delim="\t", skip = 6, show_col_types = F)
+
+res <- res %>% dplyr::rename("Orf" = "#Orf")
+res <- res %>% dplyr::rename("pvalue" = "2tp-value")
+#remove adj pval as this uses left tail only for calculation (from in vivo exper) we need to use 2-tailed pval as we don't know which direction change will be
+res <- res %>% select(-c(`Adj. p-value`))
+res <- res %>% mutate(adj_pvalue = p.adjust(pvalue, method = "BH"))
+saveRDS(res, here("in_vitro_data/R_data/ncRNA_bovis_on_tb_resamp.RData") )
+
+#any p-values < 0.05?
+res %>% filter(adj_pvalue < 0.1)
+
+```
+
+There were some large log2 fold changes, but none of the differences were statistically significant. I would suspect this is partly because so few TA sites in regions, but those with >4 still not showing significant log fold changes (which were apparent in small genes in menadione, for instance). these regions may not be expressed at high levels in in vitro exponential growth conditions and may be more involved in stress conditions.
+
+
+Brenner and sreevatsan, 2023, BMC Medical Genomics used GWAS to identify SNPs that correlated with bovis vs tb in a large set of strains/hosts/countries. Which of these are differently required?
+
+Most are ORfs, but also intergenic snp at 277,862, between Rv0231 and Rv0232. this appears to be in predicted 3' utr for Rv0231. putative_UTR:p277765_277868, no TSS not a hub. Perhaps SNP is in the promoter for Rv0232
+
+intergenic at 147,873 upstream of fusA2 (Rv0120c) wasn't part of any ncRNA we predicted (upstream from predicted 5' UTR for Rv0120c if the coordinates are the same as genome we use)
+
+
+
+choosing 22 SNPs significantly associated with Mbovis classification in two statistical tests (table 3)
+
+```{r}
+#hmm results
+orthos <- readRDS(here("in_vitro_data/R_data/blast_orthologs_complete.RData"))
+gwas_mbo <- c("Rv0120c", "Rv0156", "Rv0224c", "Rv0231c", "Rv1108c", "Rv1317c", "Rv1330c", "Rv1536", "Rv1628", "Rv2210c", "Rv2254c", "Rv2379c", "Rv2388c", "Rv2585c", "Rv2598", "Rv2833c", "Rv3011c", "Rv3166c", "Rv3456c", "Rv3484", "Rv3712", "Rv3725")
+
+orthos %>% filter(tb_orf %in% gwas_mbo & bovis_call != tb_call)
+
+#resampling results
+resamp <- readRDS(here("in_vitro_data/R_data/resamp_res_final_x10.RData"))
+resamp %>% filter(Orf %in% gwas_mbo & adj_pvalue < 1)
+```
+5 genes have different calls, pntAb(Rv0156) had no call in bovis
+Rv0224c/Mb0229c ES in bovis and GD in tb
+Rv2598 and Rv3484 (cpsA) are GA in bovis and NE in tb (both not stat signif in resampling)
+
+*Rv2833c/Mb2857c (ugpB) is GD in bovis and NE in tb*
+Showed log2FC of -3.39 but adj_pvalue > 0.05 (0.7)
+"putative glycerol-3-phosphate binding lipoprotein"
+

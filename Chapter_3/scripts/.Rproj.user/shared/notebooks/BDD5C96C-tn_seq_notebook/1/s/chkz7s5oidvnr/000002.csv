@@ -1,0 +1,5 @@
+"0","```bash
+ bamToBed -i B_S1_L001_R1_001.sort.bam > $my_path/mbovis/bed_files/B_S1.bed
+ bamToBed -i D_S2_L001_R1_001.sort.bam > $my_path/mbovis/bed_files/D_S2.bed
+ bamToBed -i G_S3_L001_R1_001.sort.bam > $my_path/mbovis/bed_files/G_S3.bed
+```"

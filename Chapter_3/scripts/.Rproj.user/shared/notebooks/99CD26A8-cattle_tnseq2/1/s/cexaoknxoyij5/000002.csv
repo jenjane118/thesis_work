@@ -1,0 +1,31 @@
+"0","```r
+input_lib <- c(\"Input\", 0.377)
+
+insertion_data <- data_ortho %>% distinct(filename, insertion) %>% drop_na()
+insertion_data <- insertion_data %>% add_row(filename = \"Input\", insertion = \"0.377\")
+insertion_data$insertion <- as.numeric(insertion_data$insertion)
+
+cols <- c(rep(\"dodgerblue\", 26), \"seagreen3\")
+
+ggplot(insertion_data) +
+  geom_col(aes(x = filename, y = insertion, fill=filename)) +
+  scale_y_continuous(limits = c(0,0.4)) +
+  theme(panel.background = element_rect(
+                  fill = \"grey75\", 
+                  colour = \"grey75\"),
+              panel.grid.major.x = element_blank(), 
+              panel.grid.minor = element_blank(),
+              axis.text.x = element_text(
+                        angle = 90, 
+                        vjust = 0.5, 
+                        hjust=1,
+                        size=10, 
+                        face = \"bold.italic\"),
+              axis.title.x = element_blank(),
+              plot.title = element_text(hjust = 0.5),
+              legend.position=\"none\") +
+  ylab(\"Insertion Density: TAs hit/total TAs\") +
+  scale_fill_manual(values=cols)
+
+ggsave(here(\"images/insertion_bar.png\"), width = 9)
+```"

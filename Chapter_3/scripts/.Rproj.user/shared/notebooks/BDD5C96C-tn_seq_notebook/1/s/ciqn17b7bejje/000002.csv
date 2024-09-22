@@ -1,0 +1,24 @@
+"0","```bash
+#!/bin/bash
+
+FILES=*.sam
+for file in $FILES
+
+do
+        filename=$(basename \"$file\")
+        filename=\"${filename%.*}\"
+
+        echo \"File on the loop:         $filename\"
+
+        #call samtools stats
+        /s/software/samtools/v1.10/bin/samtools stats ${file} > ${filename}.stats.txt
+
+        echo -e \"########################\n\n\"
+done
+
+
+# Run MultiQC
+echo \"Running MultiQC...\"
+/s/software/anaconda/python3/bin/multiqc -f .
+                                               
+```"

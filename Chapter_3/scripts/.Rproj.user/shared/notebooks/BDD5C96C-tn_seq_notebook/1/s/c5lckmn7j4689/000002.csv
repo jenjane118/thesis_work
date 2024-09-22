@@ -1,0 +1,50 @@
+"0","```r
+#compare Dejesus published results with mtb_hmm calls
+# get info from sheet 3 including orf pairs, gene names, functional categories, identical
+temp_df<-read.delim(\"data/DeJesus_ORF_ess_calls.csv\", sep=\",\", header=FALSE, stringsAsFactors=F, skip = 4)
+dejesus_df<-select(temp_df, 1, 13)
+
+mtb_compare<-as.data.frame(matrix(0, nrow = nrow(dejesus_df), ncol = 3))
+colnames(mtb_compare)<-c(\"ORF\", \"dejesus_call\", \"mtb_call\")
+
+head(mtb_compare)
+mtb_compare$ORF<-dejesus_df[,1]
+mtb_compare$dejesus_call<-dejesus_df[,2]
+
+head(mtb_hmm)
+
+for (i in 1:nrow(mtb_compare)){
+  if (mtb_compare$ORF[i] %in% mtb_hmm$ORF){
+    mtb_compare$mtb_call[i] <- mtb_hmm[which(mtb_hmm$ORF == mtb_compare$ORF[i]), 3]
+  }else{
+    mtb_compare$mtb_call[i] <- \"\"
+  }
+  # n/a is not analysed, therefore same as uncertain in paper?
+  if (mtb_compare$dejesus_call[i] == \"Uncertain\"){
+    mtb_compare$dejesus_call[i] <- \"N/A\"
+  }
+}
+View(mtb_compare)
+
+length(which(mtb_compare$dejesus_call==\"ESD\"))
+
+## list orfs with different calls
+ess_diff<-NULL
+for (i in 1:nrow(mtb_compare)){
+  if (mtb_compare$dejesus_call[i] != mtb_compare$mtb_call[i]){
+    ess_diff<-c(ess_diff, mtb_compare$ORF[i])
+  }
+}
+length(ess_diff)
+#402 differences are these down to terminology?
+length(which(mtb_compare$dejesus_call==\"ESD\"))
+# 29 are ESD which is an essential domain within ORF
+length(which(mtb_compare$mtb_call==\"\"))
+# 134 orfs not annotated in our file (are these new novel regions?)
+length(which(mtb_compare$dejesus_call==\"N/A\"))
+length(which(mtb_compare$mtb_call==\"N/A\"))
+#76 are uncertain in dejesus paper, only 5 in our analysis (same 5)
+length(which(mtb_compare$mtb_call==\"N/A\" & mtb_compare$dejesus_call==\"N/A\"))
+# 11 ESD calls in paper are ES in our analysis
+length(which(mtb_compare$dejesus_call==\"ESD\" & mtb_compare$mtb_call==\"ES\"))
+```"

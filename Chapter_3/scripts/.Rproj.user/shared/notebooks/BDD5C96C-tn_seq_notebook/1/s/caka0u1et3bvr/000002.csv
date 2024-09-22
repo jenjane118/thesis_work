@@ -1,0 +1,3 @@
+"0","```bash
+python transit.py norm glycerol_H37Rv_rep1.wig,glycerol_H37Rv_rep2.wig H37Rv.prot_table glycerol_TTR.txt -n TTR
+```"

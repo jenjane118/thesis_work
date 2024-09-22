@@ -1,0 +1,3 @@
+"0","```bash
+genomeCoverageBed –i file.bed -bg –g my.genome > sample.cov
+```"

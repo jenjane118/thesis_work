@@ -1,0 +1,13 @@
+sample,treatment,plasmid,experiment
+1,induced,sgrna,1
+2,non,sgrna,1
+3,induced,empty,1
+4,non,empty,1
+5,induced,sgrna,2
+6,non,sgrna,2
+7,induced,empty,2
+8,non,empty,2
+9,induced,sgrna,3
+10,non,sgrna,3
+11,induced,empty,3
+12,non,empty,3

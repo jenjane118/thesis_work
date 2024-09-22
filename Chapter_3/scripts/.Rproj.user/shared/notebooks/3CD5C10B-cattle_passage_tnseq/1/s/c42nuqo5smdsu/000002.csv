@@ -1,0 +1,17 @@
+"0","```bash
+which transit
+/d/in16/u/sj003/anaconda3/bin/transit
+#this is in base env, so remove it
+conda remove transit
+#create new env and reinstall
+conda create --name tnseq python=3.8
+conda activate tnseq
+conda install -c bioconda transit
+# still doesn't work
+
+# delete that env
+conda env remove --name tnseq
+# create new one--don't do python first?
+conda create --name transit -c bioconda transit
+#this works
+```"

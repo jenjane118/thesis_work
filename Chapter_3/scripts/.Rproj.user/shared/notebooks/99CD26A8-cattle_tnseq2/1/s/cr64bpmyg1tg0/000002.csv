@@ -1,0 +1,25 @@
+"0","```r
+library(tidyverse)
+data_8_10 %>%
+  filter(Orf==\"MB0003\")
+
+test_orfs <- c(\"MB0103\", \"MB0104\", \"MB0105\", \"MB0106c\", \"MB0107\", \"MB0108c\", \"MB0109\", \"MB0111c\", \"MB0112c\", \"MB0113\", \"MB0114\", \"MB0115\", \"MB0116\")
+t1 <- new_summary %>%
+  filter(Orf %in% test_orfs)
+t1
+
+t2 <-data_8_10 %>%
+  select(Orf, tissue, log2FC) %>%
+  filter(Orf %in% test_orfs) %>%
+  arrange(Orf, tissue)
+new_summary %>% 
+  filter(Orf==\"MB0132\")
+
+nrow(new_summary %>% 
+  filter(signif_lung > 5))
+nrow(new_summary %>%
+  filter(signif_lung > 10))
+
+
+
+```"

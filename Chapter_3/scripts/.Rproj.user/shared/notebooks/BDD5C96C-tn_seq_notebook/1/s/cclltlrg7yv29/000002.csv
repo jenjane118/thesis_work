@@ -1,0 +1,27 @@
+"0","```bash
+#!/bin/bash
+
+# run_qc.sh
+# usage: bash run_qc.sh
+
+FILES=*.fastq
+
+for file in $FILES
+do
+	filename=$(basename \"$file\")
+	filename=\"${filename%.*}\"
+
+	echo \"File on the loop: 	$filename\"
+
+	#call fastQC quality analysis
+	fastqc ${file}
+
+	echo -e \"########################\n\n\"
+done
+
+
+# Run MultiQC
+# -f overwrites existing files, . runs with files in current directory, -o output directory
+echo \"Running MultiQC...\"
+multiqc -f . -o bovis_hiseq/multiqc
+```"

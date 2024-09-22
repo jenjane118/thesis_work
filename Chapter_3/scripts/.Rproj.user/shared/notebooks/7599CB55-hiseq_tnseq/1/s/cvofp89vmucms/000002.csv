@@ -1,0 +1,3 @@
+"0","```bash
+transit hmm -r Sum bovis_hiseq_tpp_21.wig,bovis_hiseq_tpp_20.wig,bovis_hiseq_tpp_19.wig ~/git/tn_seq/data/mbovis.prot_table hmm_bovis_hiseq_combo.wig
+```"

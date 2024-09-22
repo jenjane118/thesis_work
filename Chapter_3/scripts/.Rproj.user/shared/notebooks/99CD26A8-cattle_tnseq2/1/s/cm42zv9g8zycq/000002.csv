@@ -1,0 +1,8 @@
+"0","```r
+# compare log2fold changes of lung and node? 
+lung <- data_ortho %>% dplyr::filter(tissue==\"Lung\")
+node <- data_ortho %>% dplyr::filter(tissue==\"Node\")
+ks.test(lung$log2FC, node$log2FC)
+
+
+```"

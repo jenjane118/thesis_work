@@ -1,0 +1,41 @@
+"0","```r
+```r
+# how many significant orfs in low vs high?
+plating_data %>%
+  filter(cfu_cat == \high\) %>%
+  filter(`Adj. p-value` < 0.05) %>%
+  group_by(Orf) %>%
+  count(Orf)
+# 199 in high
+plating_data %>%
+  filter(cfu_cat == \low\) %>%
+  filter(`Adj. p-value` < 0.05) %>%
+  group_by(Orf) %>%
+  count(Orf)
+# 482 in low
+
+# what about signif orfs per file?
+high_orfs <- plating_data %>%
+  filter(cfu_cat == \high\) %>%
+  filter(`Adj. p-value` < 0.05) %>%
+  group_by(filename, cfu_lesion, cfu_plated, number, ins_density) %>%
+  tally()
+low_orfs <- plating_data %>%
+  filter(cfu_cat == \low\) %>%
+  filter(`Adj. p-value` < 0.05) %>%
+  group_by(filename, cfu_lesion, cfu_plated, number, ins_density) %>%
+  tally()
+comp_df <- full_join(high_orfs, low_orfs) 
+  #arrange(factor(.$cfu_cat, levels = c(\high\, \low\)), 
+comp_df$number <- factor(comp_df$number, levels = c(9542, 9547, 9550))
+comp_df$filename <- factor(comp_df$filename, levels = c(\GW2_MbA30\, \GW2_MbA08\, \GW1_MbA017\, \GW2_MbA12\, \GW1_MbA018\, \GW2_MbA15\ ))
+
+ggplot(comp_df, aes(x = filename, y = n), group=cfu_lesion) +
+  geom_bar(stat=\identity\, aes(fill = cfu_lesion) ) +
+  ylab(\number of significant genes per sample\) +
+  theme(axis.title.x=element_blank()) +
+  geom_text(aes(label = cfu_plated), vjust = -0.2) +
+  geom_text(aes(label = ins_density), vjust = 5, color = \white\)
+ggsave(\images/signif_vs_cfuplated.png\, width = 9)
+```
+```"

@@ -1,0 +1,3 @@
+"0","```bash
+wget \"https://api.bintray.com/content/basespace/BaseSpaceCLI-EarlyAccess-BIN/latest/1.1.0/amd64-linux/bs?bt_package=latest\" -O $my_path/bin/bs
+```"

@@ -1,0 +1,3 @@
+"0","```bash
+conda install -c bioconda transit bwa fastqc multiqc
+```"

@@ -1,0 +1,88 @@
+"0","```r
+library(here)
+library(tidyverse)
+
+# read in data
+data_ortho <- readRDS(file=here(\"resamp_data.RData\"))
+# genes in ESX-1 locus (Mb3894-3913)
+rd1_genes <-scan(here(\"lung_tnseq\", \"data\", \"gene_lists\", \"RD1_bcg_microti_genes.txt\"), what=\"\", sep=\"\n\")
+length(rd1_genes)
+# use just the genes of deletion in BCG instead of whole ESX-1 locus
+bcg_rd1 <- rd1_genes[5:16]
+
+# any with ES or sites <5
+data_ortho %>% 
+  filter(Orf %in% rd1_genes) %>% 
+  #filter(innoc_call==\"ES\")
+  filter(TAs <5) %>%
+  group_by(Orf, TAs) %>%
+  distinct(Orf, TAs) 
+# MB3902 (1), MB3904 (4), MB3905 (1), and MB3908 (3) have less than 5 insertion sites
+
+rd_1 <- data_ortho %>%
+  filter(Orf %in% rd1_genes) %>%
+  filter(call!=\"ES\") %>%
+  #filter(tissue == \"Lung\") %>%
+  mutate(signif = `Adj. p-value` < 0.05)
+rd_1$signif <- as.factor(rd_1$signif)
+
+rd_1_bcg <-data_ortho %>%
+  filter(Orf %in% bcg_rd1) %>%
+  filter(call!=\"ES\") %>%
+  #filter(tissue == \"Lung\") %>%
+  mutate(signif = `Adj. p-value` < 0.05)
+rd_1_bcg$signif <- as.factor(rd_1_bcg$signif)
+
+
+name_seq <- c(\"espE\", \"espF\", \"espG1\", \"espH\", \"eccA1\", \"eccB1\", \"eccCa1\", \"eccCb1\", \"PE35\", \"ppe68\", \"esxB\", \"esxA\", \"espI\", \"eccD1\", \"espJ\", \"espK\")
+name_bcg <- name_seq[5:16]
+tik_seq <- c(rep(\"grey40\", 8), \"violetred\", \"grey40\", \"violetred\", \"violetred\",\"grey40\", \"grey40\", \"violetred\", \"grey40\")
+tik_bcg <- tik_seq[5:16]
+
+tissue_names <- c(\"Lung\" = \"Lung\", \"Node\"=\"Thoracic Lymph Nodes\")
+p_tog <- ggplot(rd_1, aes(x=Orf, y=log2FC, fill=tissue)) +
+  geom_boxplot(outlier.shape = NA) +   # hides outliers 
+  scale_fill_manual(values=c(\"deepskyblue3\", \"darkseagreen3\")) +
+  guides(fill = \"none\", color = guide_legend(override.aes = list(size = 2))) +    #removes legend for fill in boxplot
+  geom_jitter(alpha=0.8, size=1, width = .1,
+              aes(color=signif)) +
+  scale_color_manual(name = \"Adj. p-value <0.05\", 
+                    labels = c(\"Non-significant\", \"Significant\"), 
+                    values = c(\"grey60\", \"purple3\")) +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = \"grey95\", colour = \"grey95\"),
+        axis.text.x = element_text(angle = 90, vjust = 0.5,
+                      hjust=1, size=10, face = \"bold.italic\", color = tik_seq),
+        plot.title = element_text(hjust = 0.5),
+        legend.title = element_blank()) +
+  ggtitle(label=\"RD1 BCG genes\") +
+  xlab(\"M.bovis Gene\") +
+  facet_wrap( ~tissue, labeller = as_labeller(tissue_names))
+p_tog
+ggsave(here(\"images/RD1_boxplot.png\"), width=9)
+
+
+# make plot with gene names (Rv) and lung and node put together
+p_mixed <- ggplot(rd_1_bcg, aes(x=Orf, y=log2FC)) +
+  geom_boxplot(outlier.shape = NA, fill=\"deepskyblue3\") +   # hides outliers 
+  geom_jitter(alpha=0.8, size=1, width = .1,
+              aes(color=signif)) +
+  scale_color_manual(values = c(\"grey60\", \"purple3\")) +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = \"grey95\", colour = \"grey95\"),
+        axis.text.x = element_text(angle = 60, vjust = 0.5,
+                      size=12, face = \"bold.italic\", color = tik_bcg),
+        axis.title.y = element_text(size=12, face=\"bold\"),
+        axis.text.y = element_text(size=10, face = \"bold\"),
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust=0.5),
+        legend.title = element_blank(),
+        legend.position = \"none\",
+        axis.title.x = element_blank()) +
+  ggtitle(label=\"Region of Difference 1 (BCG deleted genes, Mb3898-3909c)\", subtitle = \"p-adj < 0.05 in purple\") +
+  scale_x_discrete(labels= name_bcg)
+p_mixed
+ggsave(here(\"images/RD1_mixed_boxplot.png\"))
+
+
+```"

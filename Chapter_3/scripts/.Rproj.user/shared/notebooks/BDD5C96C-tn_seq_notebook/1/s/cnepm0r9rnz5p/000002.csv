@@ -1,0 +1,3 @@
+"0","```bash
+transit export combined_wig pe_SRR4113427.wig,pe_SRR4113428.wig,pe_SRR4113429.wig,pe_SRR4113430.wig,pe_SRR4113431.wig,pe_SRR4113432.wig,pe_SRR4113433.wig,pe_SRR4113434.wig,pe_SRR4113435.wig,pe_SRR4113436.wig,pe_SRR4113437.wig,pe_SRR4113438.wig,pe_SRR4113439.wig,pe_SRR4113440.wig $my_path/refseqs/Mtb/mtbH37Rv.prot_table dejesus_combined_ttr.wig -n TTR
+```"

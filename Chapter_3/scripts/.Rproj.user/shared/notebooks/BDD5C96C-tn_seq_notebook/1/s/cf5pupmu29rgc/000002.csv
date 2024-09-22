@@ -1,0 +1,4 @@
+"0","```bash
+conda activate tnseq
+tpp -bwa ~/anaconda3/envs/tnseq/bin/bwa -ref ~/git/tn_seq/data/Mtb_H37Rv.fasta -reads1 ~/Data/mtb_hiseq/MtbA022_R1_001.fastq -output mtb_hiseq_tpp
+```"

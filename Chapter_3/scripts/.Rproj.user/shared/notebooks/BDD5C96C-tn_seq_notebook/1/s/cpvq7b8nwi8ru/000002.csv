@@ -1,0 +1,3 @@
+"0","```bash
+bedtools genomecov [OPTIONS] -i <bed/gff/vcf> -g <genome>
+```"

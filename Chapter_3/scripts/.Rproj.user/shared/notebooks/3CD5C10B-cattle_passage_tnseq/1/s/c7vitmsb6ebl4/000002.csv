@@ -1,0 +1,57 @@
+"0","```r
+```r
+library(tidyverse)
+#list filenames
+plating_data %>%
+  group_by(filename, number) %>%
+  distinct(number, filename)
+
+pair1 <- plating_data %>%
+  filter(number == \9542\) %>%
+  select(filename, Orf, log2FC, `p-value`, `Adj. p-value`, cfu_cat) %>%
+  mutate(log_pval = -log10(`p-value`))
+pair2 <- plating_data %>%
+  filter(number == \9547\) %>%
+  select(filename, Orf, log2FC, `p-value`,`Adj. p-value`, cfu_cat)%>%
+  mutate(log_pval = -log10(`p-value`))
+pair3 <- plating_data %>%
+  filter(number == \9550\) %>%
+  select(filename, Orf, log2FC,`p-value`, `Adj. p-value`, cfu_cat)%>%
+  mutate(log_pval = -log10(`p-value`))
+
+plot1 <- ggplot( pair1, group=cfu_cat) +
+  geom_point(aes(x = log2FC, y = log_pval, color=cfu_cat), alpha = 0.7) +
+  scale_color_manual(values = c(\blue\, \red\)) +
+  ylim(0,10) +
+  labs(y = \-log10(p-value)\) +
+  facet_wrap(\cfu_cat\)
+plot1
+ggsave(\images/plot_pair1_cfu.png\)
+
+pair1$cfu_cat <- as.factor(pair1$cfu_cat)
+
+plot(x = pair1$log2FC, y = pair1$log_pval, ylim = c(0,6), col=c(\red\, \blue\)[pair1$cfu_cat])
+
+
+png(\images/plot_pair1_cfu_base.png\)
+plot(x = pair1$log2FC, y = pair1$log_pval, ylim = c(0,6), col=c(\red\, \blue\)[pair1$cfu_cat])
+dev.off()
+
+
+
+ggplot(pair1, group = cfu_cat) +
+  geom_histogram(aes(x = `p-value`, fill=cfu_cat), bins = 50) +
+  facet_wrap(\cfu_cat\)
+ggsave(\images/histogram_pair1.png\)
+
+
+plot3 <- ggplot( pair3, group=cfu_cat) +
+  geom_point(aes(x = log2FC, y = log_pval, color=cfu_cat), alpha = 0.7) +
+  scale_color_manual(values = c(\blue\, \red\)) +
+  ylim(0,10) +
+  facet_wrap(\cfu_cat\)
+plot3
+
+## looks same as plot 1
+```
+```"

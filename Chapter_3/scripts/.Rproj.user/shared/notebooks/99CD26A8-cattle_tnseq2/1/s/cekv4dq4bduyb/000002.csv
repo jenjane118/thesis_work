@@ -1,0 +1,65 @@
+"0","```r
+library(gridExtra)
+library(tidyverse)
+
+data_ortho %>% filter(tissue==\"Lung\") %>% distinct(filename)
+
+lung_vol <- data_ortho %>% 
+  filter(tissue == \"Lung\") %>%
+  filter(filename==\"GW2_MbA16\") %>%
+  mutate(signif = `Adj. p-value` < 0.05)
+  #add pseudocount to 0 p-values
+  #mutate(`Adj. p-value`=`Adj. p-value` + 0.0001)
+
+
+
+ggplot(data = lung_vol) +
+  geom_jitter(aes(x = log2FC, y = -log10(`pval-ltail`)), color=\"dodgerblue\", alpha=0.8)
+
+# plot for points significant at least 1 sample
+g1<-ggplot(data = lung_vol, aes(x = log2FC, y = -log10(`Adj. p-value`))) +
+  geom_point(aes(color= `Adj. p-value` <0.05), alpha=0.8) +
+  scale_color_manual(name = \"Adj. p-value <0.05\", 
+                    labels = c(\"Non-significant\", \"Signficant\"),
+                    values = c(\"grey60\",\"steelblue3\")) +
+  ggtitle(\"Log2 fold change lung sample MbA16\") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 10),
+    plot.subtitle = element_text(hjust = 0.5, size = 8),
+        #legend.title=element_text(size=9), 
+        legend.title=element_blank(),
+        legend.text=element_text(size=8),
+        legend.position=\"bottom\") 
+
+g1
+
+
+node_vol <- data_ortho %>% 
+  filter(filename==\"GW2_MbA21\") %>%
+  mutate(signif = `Adj. p-value` < 0.05)
+
+g_node <- ggplot(data = node_vol, aes(x = log2FC, y = -log10(`Adj. p-value`))) +
+  geom_point(aes(color= `Adj. p-value` <0.05), alpha=0.8) +
+  scale_color_manual(name = \"Adj. p-value <0.05\", 
+                    labels = c(\"Non-significant\", \"Signficant\"),
+                    values = c(\"grey60\",\"steelblue3\")) +
+  ggtitle(\"Log2 fold change node sample MbA21\") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 10),
+    plot.subtitle = element_text(hjust = 0.5, size = 8),
+        #legend.title=element_text(size=9), 
+        legend.title = element_blank(),
+        legend.text=element_text(size=8),
+        legend.position=\"bottom\",
+    axis.title.y = element_blank()
+    ) +
+  xlim(-15,10)
+g_node
+
+vol_samples <- grid.arrange(g1, g_node, nrow=1)
+
+ggsave(here(\"images/sample_volcanos.png\"), plot=vol_samples, width=9)
+
+#try EnhancedVolcano package to see if this helps the banding
+library(EnhancedVolcano)
+
+
+```"

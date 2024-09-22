@@ -1,0 +1,91 @@
+"0","```r
+library(tidyverse)
+library(here)
+# read hmm file for input library
+hmm_file <- read_tsv(here(\"lung_tnseq\", \"data\", \"tpp_genewiz2\", \"transit_18_08_21\", \"hmm_MbA027_loess.txt\"), skip=18, col_names=F)
+colnames(hmm_file) <- c(\"TA_site\", \"input\", \"ES\", \"GD\", \"NE\", \"GA\", \"call\", \"gene\")
+hmm_file <- hmm_file %>%
+  mutate(gene = sub( \"_.*\" , \"\", gene))
+
+# because non-permissive sites removed, some genes with no TA sites not included?
+
+hmm_file %>% distinct(gene) %>% arrange(gene)
+
+# add in wig files for output library (use non-permissive removed)
+output_wig <- read_delim(here(\"lung_tnseq\", \"data\", \"final_sample_wigs\", \"perm_lung_tpp_MbA02.wig\"), delim=\" \", skip=2, col_names = F)
+
+#inner join is all rows in x or y based on key=TA_site
+data <- full_join(hmm_file, output_wig, by=c(\"TA_site\"=\"X1\")) %>%
+  filter(grepl(\"MB\", gene))
+
+# each gene and number of sites disrupted (number of disrupted sites, NOT insertions)
+data <- data %>% 
+  mutate(input_ins = input>0) %>%
+  mutate(output_ins = X2 >0) %>%
+  add_count(gene, name=\"n_ta_sites\")
+  
+
+#group_by(country) %>% summarise(named_active = sum(assets[named==TRUE & active==1]),
+ #           named = sum(assets[named==TRUE]),
+  #          TotalAssets = sum(assets[active==1]))
+
+sum_data <- data %>% group_by(gene, n_ta_sites) %>% 
+  summarise( input_no_ins = sum(input_ins[input_ins==TRUE]), 
+             output_no_ins = sum(output_ins[output_ins==TRUE]))
+
+sum_data <- sum_data %>%  mutate(input_ins_percent = input_no_ins/n_ta_sites * 100) %>%
+  mutate(output_ins_percent = output_no_ins/n_ta_sites *100)
+
+#turn into longform data
+library(reshape2)
+t1 <- sum_data[, c(1,5,6)]
+t1 <- melt(t1)
+
+
+g1 <- ggplot(t1, aes(x=value, fill=variable)) +
+  geom_density(alpha = 0.5, aes(fill=variable)) +
+  theme(panel.grid.major.x = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  xlab(\"Percent of TA sites disrupted per gene\") +
+  ylab(\"Number of genes\") +
+  scale_fill_manual(labels = c(\"input\", \"output\"), 
+                    values = c(\"seagreen3\", \"turquoise3\")) +
+  guides(fill=guide_legend(\"Library\")) +
+  ggtitle(\"Distribution of % of disrupted genes for input/output libraries\")
+
+g1
+
+# I think better to do this with non-zero output genes only (genes that had some disrupted sites in both input and output libraries)
+
+sum_data_ne <- sum_data %>% filter(output_no_ins>0)
+t1 <- sum_data_ne[, c(1,5,6)]
+t1 <- melt(t1)
+
+# mean difference in proportion of inserted TA sites per gene (for genes with insertions only)
+mean(sum_data_ne$output_ins_percent - sum_data_ne$input_ins_percent)
+#-31.28%
+
+g2 <- ggplot(t1, aes(x=value, fill=variable)) +
+  geom_density(alpha = 0.5, aes(fill=variable)) +
+  theme(panel.grid.major.x = element_blank(), 
+        panel.grid.minor = element_blank()) +
+  xlab(\"Percent of TA sites disrupted per gene\") +
+  ylab(\"Number of genes\") +
+  scale_fill_manual(labels = c(\"input\", \"output\"), 
+                    values = c(\"seagreen3\", \"turquoise3\")) +
+  guides(fill=guide_legend(\"Library\")) +
+  ggtitle(\"Distribution of % of disrupted genes for input/output libraries: (genes with insertions only\")
+
+g2
+
+
+
+
+ggsave(here(\"images\", \"compare_library_distr.png\"), g2)
+
+
+
+
+
+
+```"

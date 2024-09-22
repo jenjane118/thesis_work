@@ -1,0 +1,29 @@
+"0","```r
+library(tidyverse)
+library(here)
+# import dataframe
+modlin_gb <- readRDS(here(\"data\", \"modlin_gbk.RData\"))
+# how many conserved hypotheticals
+nrow(modlin_gb %>% filter(functional_cat == \"conserved hypotheticals\"))
+#1019
+
+# how many in our data
+data <- read_tsv(here(\"Output/summary_11_10.tsv\"))
+nrow(data %>% filter(func_cat == \"conserved hypotheticals\"))
+#1100
+
+#so there are 81 fewer conserved hypotheticals
+
+compare <- data %>% select(Orf, Name, H37Rv_Ortholog, func_cat)
+compare <- left_join(compare, modlin_gb, by=c(\"H37Rv_Ortholog\" = \"locus_tag\"), keep=FALSE)
+
+cols <- c(1,2,4,12)
+View(compare[compare$func_cat != compare$functional_cat, cols])
+#1305 different functional categories?
+# mostly just whitespace differences
+
+compare <- compare %>% 
+  mutate(functional_cat = sub(\"intermediary metabolism andrespiration\", \"intermediary metabolism and respiration\", functional_cat)) %>%
+  mutate(functional_cat = sub(\"virulence, detoxification,adaptation\", \"virulence, detoxification, adaptation\", functional_cat))
+
+```"

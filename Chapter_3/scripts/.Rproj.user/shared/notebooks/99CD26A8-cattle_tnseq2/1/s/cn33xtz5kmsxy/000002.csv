@@ -1,0 +1,39 @@
+"0","```r
+
+#pairwise.wilcox.test(log2FC, filename, p.adjust.method=\"BH\")
+node_data <- data_ortho %>%
+  filter(tissue==\"Node\") %>%
+  select(filename, Orf, log2FC)
+
+pw <- pairwise.wilcox.test(node_data$log2FC, node_data$filename, p.adjust.method = \"BH\", paired=T)
+
+pw
+#node samples 21, is well correlated with all other samples, 22 not well correlated with 23 and 24, 25 and 26 less well correlated with each other
+
+lung_data <- data_ortho %>%
+  filter(tissue==\"Lung\") %>%
+  select(filename, Orf, log2FC)
+pw_lung <- pairwise.wilcox.test(lung_data$log2FC, lung_data$filename, p.adjust.method=\"BH\", paired=T)
+pw_lung
+
+
+# attempt with only node
+node_data <- data_ortho %>%
+  filter(tissue==\"Node\") %>%
+  select(filename, Orf, log2FC) %>%
+  spread(key=filename, value=log2FC)
+    
+#par(mar=c(1,1,1,1))
+png(here(\"images/pairs_plot.png\"))
+p2 <- pairs(corr_data[2:7])
+dev.off()
+
+# try with only significant orfs (how is this done--diff p-values in different samples)
+node_data <- data_ortho %>%
+  filter(tissue==\"Node\") %>%
+  filter(`Adj. p-value` <=0.05) %>%
+  select(filename, Orf, log2FC) %>%
+  spread(key=filename, value=log2FC)
+p_sig <- pairs(corr_data[2:7])
+
+```"

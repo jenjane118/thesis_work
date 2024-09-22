@@ -1,0 +1,50 @@
+"0","```r
+data_ortho <- readRDS(here(\"resamp_data.RData\"))
+
+lung_att_genes <- data_ortho %>%
+  dplyr::filter(tissue==\"Lung\") %>%
+  group_by(Orf) %>%
+  dplyr::filter(log2FC < 0 & `Adj. p-value` < 0.05) %>%
+  distinct(Orf)
+nrow(lung_att_genes)
+#968
+node_att_genes <- data_ortho %>%
+  dplyr::filter(tissue==\"Node\") %>%
+  group_by(Orf) %>%
+  dplyr::filter(log2FC < 0 & `Adj. p-value` < 0.05) %>%
+  distinct(Orf)
+nrow(node_att_genes)
+#224
+
+#genes in lung not in node:
+lung_att_genes %>% dplyr::filter(!Orf %in% node_att_genes$Orf)
+#745
+#in node not in lung
+node_att_genes %>% dplyr::filter(!Orf %in% lung_att_genes$Orf)
+# 1
+
+#use threshold of 10 lung samples
+sig_att_lung <- data_ortho %>%
+  dplyr::filter(tissue==\"Lung\") %>%
+  dplyr::filter(log2FC < 0 & `Adj. p-value` < 0.05) %>%
+  group_by(Orf) %>%
+  summarise(n_att = n()) %>%
+  dplyr::filter(n_att >9) 
+nrow(sig_att_lung)
+#125
+
+sig_att_node <- data_ortho %>%
+  dplyr::filter(tissue==\"Node\") %>%
+  dplyr::filter(log2FC < 0 & `Adj. p-value` < 0.05) %>%
+  group_by(Orf) %>%
+  summarise(n_att = n()) %>%
+  dplyr::filter(n_att >4) 
+nrow(sig_att_node)
+#81
+
+sig_att_lung %>% dplyr::filter(!Orf %in% sig_att_node$Orf)
+#46 genes significantly attenuated in lung but not significantly attenuated in node
+sig_att_node %>% dplyr::filter(!Orf %in% sig_att_lung$Orf)
+# 2 genes sig in node but not in lung at threshold
+
+```"

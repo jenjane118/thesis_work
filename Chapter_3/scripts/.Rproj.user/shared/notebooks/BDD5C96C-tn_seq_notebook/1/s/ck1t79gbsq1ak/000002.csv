@@ -1,0 +1,3 @@
+"0","```bash
+remove_tradis_tags -f G_S3.tag.fastq -t GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA -o G_S3.rmtag.fastq
+```"

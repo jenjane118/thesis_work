@@ -1,0 +1,4 @@
+"0","```bash
+samtools mpileup -BQ0 run.sorted.bam | perl -pe '($c, $start, undef, $depth) = split;if ($c ne $lastC || $start != $lastStart+1) {print \"fixedStep chrom=$c start=$start step=1 span=1\n\";}$_ = $depth.\"\n\";($lastC, $lastStart) = ($c, $start);' | gzip -c > run.wig.gz
+
+```"

@@ -1,0 +1,140 @@
+"0","```r
+# use kolmogorov-smirnov test
+#two-sample test of the null hypothesis that x and y were drawn from the same continuous distribution is performed.
+
+data_ortho <- readRDS(here(\"resamp_data.RData\"))
+
+# lung_means <- data_ortho %>%
+#   filter(tissue==\"Lung\") %>%
+#   group_by(Orf) %>%
+#   summarise(Orf, meanlfc = mean(log2FC)) %>%
+#   distinct(Orf, meanlfc)
+# nrow(lung_means)
+
+node_means <- data_ortho %>%
+  dplyr::filter(tissue==\"Node\") %>%
+  group_by(Orf) %>%
+  summarise(Orf, tissue, meanlfc = mean(log2FC), sd_lfc = sd(log2FC), pval=min(`Adj. p-value`)) %>%
+  distinct(Orf, tissue, meanlfc, sd_lfc, pval) %>%
+  mutate(sig = ifelse(pval < 0.05, TRUE, FALSE))
+  
+nrow(node_means)
+
+ggplot(node_means, aes(x=meanlfc, y=rank(meanlfc))) +
+  geom_point()
+
+# null hypothesis = from same distribution
+ks.test(lung_means$meanlfc, node_means$meanlfc, alternative=\"greater\")
+# alternative hypothesis, CDF of x lies above that of y
+
+#Kendall's rank correlation tau
+
+#Test for association between lung and node samples
+# test ranks with cor.test, 'kendall' or spearman
+#cor.test(lung_means$meanlfc, node_means$meanlfc, method = \"kendall\")
+#alternative hypothesis: true tau is not equal to 0
+#z = 62.75, p-value < 2.2e-16
+#rho = 0.8775726  tau=0.70359 
+
+# need to do this with paired animals lung/node instead?
+node_animals <- data_ortho %>% dplyr::filter(tissue==\"Node\") %>% distinct(number)
+
+lung_means <- data_ortho %>%
+  dplyr::filter(tissue==\"Lung\") %>%
+  dplyr::filter(number %in% node_animals$number) %>%
+  group_by(Orf) %>%
+  summarise(Orf, tissue, meanlfc = mean(log2FC), sd_lfc = sd(log2FC), pval=min(`Adj. p-value`)) %>%
+  distinct(Orf, tissue, meanlfc, sd_lfc, pval) %>%
+  mutate(sig = ifelse(pval < 0.05, TRUE, FALSE))
+  
+ggplot(lung_means, aes(x=meanlfc, y=rank(meanlfc))) +
+  geom_point()
+
+# Plot the standard deviation of the log fold change versus the  mean log fold change
+
+sig_colors <- c(\"darkgrey\", \"blue\")
+ggplot(lung_means, aes(x=meanlfc, y=sd_lfc, color=sig)) +
+  geom_point() +
+  scale_color_manual(values=sig_colors)
+ggsave(here(\"images/sd_meanlfc_lung.png\"))
+
+# do the same thing but with delta mean? shows that significant genes have negative delta means and low std deviation
+lung_means2 <- data_ortho %>%
+  dplyr::filter(tissue==\"Lung\") %>%
+  dplyr::filter(number %in% node_animals$number) %>%
+  group_by(Orf) %>%
+  summarise(Orf, tissue, mean_delta = mean(`Delta Mean`), sd_delta = sd(`Delta Mean`), pval=min(`Adj. p-value`)) %>%
+  distinct(Orf, tissue, mean_delta, sd_delta, pval) %>%
+  mutate(sig = ifelse(pval < 0.05, TRUE, FALSE))
+ggplot(lung_means2, aes(x=mean_delta, y=sd_delta, color=sig)) +
+  geom_point() +
+  scale_color_manual(values=sig_colors) +
+  ylim(0, 5000) + xlim(-4000, 4000)
+ggsave(here(\"images/sd_mean_delta_lung.png\"))
+
+#test for correlation
+
+cor.test(lung_means$meanlfc, node_means$meanlfc, method = \"spearman\")
+#rho = 0.8362822   tau=0.70359 
+#p-value p-value < 2.2e-16
+# strong correlation
+
+# see https://influentialpoints.com/Critiques/displaying_distributions_using_R.htm
+# simple rank scatterplot: 
+# scatterplot of rank on value.
+
+# plot this with both on top of each other?
+y = lung_means$meanlfc
+x = node_means$meanlfc
+mat <- as.data.frame(cbind(lung_means$Orf, lung_means$meanlfc, rank(lung_means$meanlfc, ties.method = \"random\"), node_means$meanlfc, rank(node_means$meanlfc, ties.method='random')))
+colnames(mat) <- c(\"Orf\", \"lung_meanlfc\", \"lung_rank\", \"node_meanlfc\", \"node_rank\")
+
+plot(x, rank(x,ties.method='random'), col=\"blue\", cex = 0.5)
+points(y, rank(y, ties.method='random'), col = \"red\", cex = 0.5)
+
+
+  
+my_colors <- c(\"lung\" = \"blue\", \"node\" = \"red\")
+# ggplot( mat ) +
+#   geom_point(data = mat, aes(x = lung_meanlfc, y = lung_rank, color = \"lung\"), alpha = 0.4) +
+#   geom_point(data = mat, aes(x = node_meanlfc, y = node_rank, color = \"node\"), alpha = 0.4) +
+#   labs(x = \"mean log2 fold change\", y = \"rank\",
+#          color = \"tissue\") +
+#   scale_color_manual(values = my_colors) +
+#   ggtitle(\"Scatterplot of Rank on mean log2 fold change for all genes in matched lung/node samples\")
+
+ggplot(mat, aes(x=meanlfc, y=rank(meanlfc), color=tissue)) +
+  geom_point() +
+  scale_color_manual(values=my_colors)
+
+ggsave(here(\"images/rank_on_mean_node_lung.png\"))
+
+#QQ plot
+png(here(\"images/qq_plot_lung_node.png\"))
+plot(sort(x),sort(y), main=\"QQ plot of matched node and lung samples\")
+# show expected relationship
+abline(0,1) # if Y1=Y2
+dev.off()
+
+# another method for correlation using kendall's tau to measure association (no p-value calculated)
+cor(x,y, method=\"kendall\", use=\"pairwise\") 
+#Kendall coefficient (tau) = 0.70359 (same as above)
+# shows moderately good correlation
+
+
+#check a few genes with high lfc and very low sd (MB0526, MB2758c, MB1225, MB3532c)
+#total sd for all samples
+data_ortho %>% dplyr::filter(Orf==\"MB3532c\") %>% summarise(mean_lfc = mean(log2FC), std_dev = sd(log2FC))
+# for just 6 samples with node and lung
+data_ortho %>% dplyr::filter(Orf==\"MB3532c\") %>% 
+  dplyr::filter(tissue==\"Lung\") %>%
+  dplyr::filter(number %in% node_animals$number) %>%
+  summarise(mean_lfc = mean(log2FC), std_dev = sd(log2FC))
+
+# what is actual correlation for unpaired samples
+cor.test(lung_means$meanlfc, node_means$meanlfc, method = \"spearman\")
+#rho = 0.8362822   tau=0.70359 
+#p-value p-value < 2.2e-16
+# strong correlation
+
+```"

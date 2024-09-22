@@ -1,0 +1,116 @@
+"0","```r
+library(gridExtra)
+library(tidyverse)
+
+lung_vol <- data_ortho %>% 
+  filter(tissue == \"Lung\") %>%
+  mutate(signif = `Adj. p-value` < 0.05) %>%
+  group_by(Orf) %>%
+  add_tally(signif) 
+
+
+ggplot(data = lung_vol) +
+  geom_point(aes(x = log2FC, y = -log10(`Adj. p-value`)), color=\"dodgerblue\", alpha=0.8) 
+
+
+lung1 <- lung_vol %>% filter(n>=1)
+nrow(lung1 %>% distinct(Orf))
+#968
+# plot for points significant at least 1 sample
+g1<-ggplot(data = lung_vol, aes(x = log2FC, y = -log10(`Adj. p-value`))) +
+  geom_point(aes(color= `Adj. p-value` <0.05), alpha=0.8) +
+  scale_color_manual(name = \"Adj. p-value <0.05\", 
+                    labels = c(\"Non-significant\", \"Signficant\"),
+                    values = c(\"grey60\",\"steelblue3\")) +
+  ggtitle(\"Log2 fold change significance in lung\", subtitle=\"1 or more\") + 
+  theme(plot.title = element_text(hjust = 0.5, size = 10),
+    plot.subtitle = element_text(hjust = 0.5, size = 8),
+        legend.title=element_text(size=9), 
+        legend.text=element_text(size=8),) 
+  #xlim(-10,6) +
+  #ylim(0,2.75) 
+
+g1
+
+lung2 <- lung_vol %>% filter(n>=5)
+nrow(lung2 %>% distinct(Orf))
+#286 (164)
+g2<-ggplot(data = lung_vol, aes(x = log2FC, y = -log10(`Adj. p-value`))) +
+  geom_point(aes(color=n>=5 & `Adj. p-value` <0.05), alpha=0.8) +
+  scale_color_manual(name = \"Adj. p-value <0.05\", 
+                    labels = c(\"Non-significant\", \"Signficant\"),
+                    values = c(\"grey60\",\"dodgerblue\")) +
+  ggtitle(\"Log2 fold change significance in lung\", subtitle=\"5 or more\") + 
+  theme(
+    #axis.title.y = element_blank(),
+    #axis.text.y = element_blank(),
+    #axis.ticks.y = element_blank(),
+    legend.title=element_text(size=9), 
+    legend.text=element_text(size=8),
+    plot.title = element_text(hjust = 0.5, size = 10),
+    plot.subtitle = element_text(hjust = 0.5, size = 8)) 
+  #xlim(-10,6) +
+  #ylim(0,2.75)
+g2
+
+lung3 <- lung_vol %>% filter(n>=10)
+nrow(lung3 %>% distinct(Orf))
+#125 (vs 92)
+g3 <- ggplot(data = lung_vol, aes(x = log2FC, y = -log10(`Adj. p-value`))) +
+  geom_point(aes(color=n>=10 & `Adj. p-value` <0.05), alpha=0.8) +
+  scale_color_manual(name = \"Adj. p-value <0.05\", 
+                    labels = c(\"Non-significant\", \"Signficant\"),
+                    values = c(\"grey60\",\"blue3\")) +
+  ggtitle(\"Log2 fold change significance in lung\", subtitle=\"10 or more\") + 
+  theme(
+    #axis.title.y = element_blank(),
+    #axis.text.y = element_blank(),
+    #axis.ticks.y = element_blank(),
+    legend.title=element_text(size=9), 
+    legend.text=element_text(size=8),
+    plot.title = element_text(hjust = 0.5, size = 10),
+    plot.subtitle = element_text(hjust = 0.5, size = 8)
+  ) 
+#+
+#  xlim(-10,6) +
+#  ylim(0,2.75) 
+  
+g3
+#vol_lung <- grid.arrange(g1,g2,g3, ncol=3)             
+#ggsave(here(\"images/volcano_lung.png\"), vol_lung, width=9)                    
+# lymph node plot
+node_vol <- data_ortho %>% 
+  filter(tissue == \"Node\") %>%
+  mutate(signif = `Adj. p-value` < 0.05) %>%
+  group_by(Orf) %>%
+  add_tally(signif) 
+
+node_3 <- node_vol %>% filter(n>=3)
+nrow(node_3 %>% distinct(Orf))
+#121 (95)
+g4 <- ggplot(data = node_vol, aes(x = log2FC, y = -log10(`Adj. p-value`))) +
+  geom_point(aes(color=n>=3 & `Adj. p-value` < 0.05), alpha=0.8) +
+   scale_color_manual(name = \"Adj. p-value <0.05\", 
+                    labels = c(\"Non-significant\", \"Significant\"),
+                    values = c(\"grey60\", \"seagreen3\")) +
+  ggtitle(\"Log2 fold change significance in Node\", subtitle=\"3 or more Samples\") + 
+  theme(
+    #axis.title.y = element_blank(),
+    #axis.text.y = element_blank(),
+    #axis.ticks.y = element_blank(),
+    legend.title=element_text(size=9), 
+    legend.text=element_text(size=8),
+    plot.title = element_text(hjust = 0.5, size = 10),
+    plot.subtitle = element_text(hjust = 0.5, size = 8))
+g4
+ggsave(here(\"images\", \"node_volcano.png\"), g4)
+
+
+vol_lung <- grid.arrange(g1,g2,g3, ncol=3)
+ggsave(here(\"images\", \"lung_volcano.png\"), vol_lung, width=9)
+
+#save as a grid of 2x2
+
+vol_all <- grid.arrange(g1,g2,g3,g4,ncol=2)
+ggsave(here(\"images\", \"volcano.png\"), vol_all, width=9)
+```"

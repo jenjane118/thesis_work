@@ -1,0 +1,2404 @@
+---
+title: "phoPR_antisense2"
+output: html_notebook
+---
+
+Date: 23 April 2024
+Author: Jennifer J. Stiens 
+[j.j.stiens\@gmail.com](mailto:j.j.stiens@gmail.com){.email}
+
+Continue work on antisense phoR (includes all current deseq work)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+i_am("as_phoR.Rproj")
+
+library(here)
+library(tidyverse)
+
+```
+
+
+## Testing with including experiment in the design
+
+### sva to determine batch effects in experiments
+
+[sva](https://bioconductor.org/packages/release/workflows/vignettes/rnaseqGene/inst/doc/rnaseqGene.html#removing-hidden-batch-effects)
+
+Originally, counts are from all_features_150424_Counts.csv + plasmid counts (including dcas9 etc)
+
+2 May 2024 counts now from bh_all_020524_Counts.csv
+
+pca of non-corrected
+
+```{r pca uncorrected}
+library(DESeq2)
+library(PCAtools)
+library(gridExtra)
+library("pheatmap")
+library("RColorBrewer")
+source(here("scripts/ggbiplot_pcatools.R"))
+
+counts <- as.matrix(read.delim(here("counts/bh_all_020524_Counts.csv")), sep="\t")
+dim(counts)
+colnames(counts) <- seq(1,12)
+
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <- DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+design(dds) <- formula(~ 1 + treatment + plasmid + treatment:plasmid)
+dds <- DESeq(dds) 
+
+vsd <- vst(ddssva)
+
+png(here("images/orig_pca_simple.png"))
+plotPCA(vsd, "experiment")
+dev.off()
+
+#more pca plots
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond.df)
+summary(p)
+
+source(here("scripts/ggbiplot_pcatools.R"))
+ggbiplot(p, c("PC1", "PC2"), "experiment", "treatment", "plasmid", "right")
+#ggsave(here("images/PC1_2_original.png"))
+#other pcs
+ggbiplot(p, c("PC2", "PC3"), "experiment", "treatment", "plasmid")
+#ggsave(here("images/PC2_3_original.png"))
+ggbiplot(p, c("PC3", "PC4"), "experiment", "treatment", "plasmid", "none")
+#ggsave(here("images/PC3_4_original.png"))
+
+
+#eigencore plot (looks the same with non-coding)
+#make with all numeric factors (can't use factors fo eigenplot)
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond.df)
+cond_eigen <- cond.df
+cond_eigen$sample <- as.numeric(as.character(cond.df$sample))
+cond_eigen$experiment <- as.numeric(cond.df$experiment)
+cond_eigen$treatment <- as.numeric(cond.df$treatment)
+cond_eigen$plasmid <- as.numeric(cond.df$plasmid)
+p_eigen <- pca(assay(vsd), removeVar = 0.1, metadata = cond_eigen)
+
+pl_ec <- eigencorplot(p_eigen, getComponents(p, 1:6),
+    metavars = c('experiment', 'plasmid','treatment'), corMultipleTestCorrection="BH")
+
+png(filename = here("images/orig_eigencorePlot.png"), width = 540)
+pl_ec
+dev.off()
+
+
+```
+
+
+
+
+
+
+surrogate vector analysis
+
+```{r sva}
+library(DESeq2)
+library(sva)
+library(limma)
+library(PCAtools)
+library(gridExtra)
+#library(vsn)
+library("pheatmap")
+library("RColorBrewer")
+source(here("scripts/ggbiplot_pcatools.R"))
+
+#counts <- readRDS(here("R_data/complete_counts.RData"))
+counts <- as.matrix(read.delim(here("counts/bh_all_020524_Counts.csv")), sep="\t")
+dim(counts)
+colnames(counts) <- seq(1,12)
+
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <- DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+design(dds) <- formula(~ 1 + treatment + plasmid + treatment:plasmid)
+#design(dds_asphor) <- formula(~ plasmid + treatment + plasmid:treatment)
+dds <- DESeq(dds) 
+
+#we know of two variables but are interested in any surrogate variables
+dat  <- counts(dds, normalized = TRUE)
+idx  <- rowMeans(dat) > 1
+dat  <- dat[idx, ]
+mod  <- model.matrix(~ treatment + plasmid + treatment:plasmid, colData(dds))
+mod0 <- model.matrix(~ 1, colData(dds))
+#estimate two surrogate variables
+svseq <- svaseq(dat, mod, mod0, n.sv = 2)
+#estimate one variable
+#svseq <- svaseq(dat, mod, mod0, n.sv = 1)
+#estimate number of surrogate variables
+svseq <- svaseq(dat, mod, mod0, n.sv=NULL)
+# estimates 2 surrogate variables
+
+#see if either matches with experiment
+par(mfrow = c(2, 1), mar = c(3,5,3,1))
+for (i in 1:2){
+stripchart(svseq$sv[, i] ~ dds$experiment, vertical = TRUE, main = paste0("SV", i))
+abline(h = 0)
+}
+
+#for only one
+par(mfrow = c(1, 1), mar = c(5.1, 4.1, 4.1, 2.1))
+png(here("images/sv1_experiment_strip.png"))
+stripchart(svseq$sv[, 1] ~ dds$experiment, vertical = TRUE, main = paste0("SV", 1))
+abline(h = 0)
+dev.off()
+
+par(mfrow = c(1, 1), mar = c(5.1, 4.1, 4.1, 2.1))
+png(here("images/sv2_plasmid_strip.png"))
+stripchart(svseq$sv[, 2] ~ dds$experiment, vertical = TRUE, main = paste0("SV", 1))
+abline(h = 0)
+dev.off()
+
+
+
+```
+
+
+
+
+### Remove batch effect for single surrogate vector that correlates with 'experiment'
+
+```{r sv1}
+library(DESeq2)
+library(limma)
+library(vsn)
+library(plotly)
+library(RColorBrewer)
+library(pheatmap)
+library(sva)
+
+counts <- readRDS(here("R_data/complete_counts.RData"))
+counts <- as.matrix(read.delim(here("counts/bh_all_020524_Counts.csv")), sep="\t")
+dim(counts)
+colnames(counts) <- seq(1,12)
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <- DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+design(dds) <- formula(~ 1 + treatment + plasmid + treatment:plasmid)
+dds <- DESeq(dds) 
+
+#add these surrogate vectors as columns in dataset and change design
+
+ddssva <- dds
+dat  <- counts(dds, normalized = TRUE)
+idx  <- rowMeans(dat) > 1
+dat  <- dat[idx, ]
+mod  <- model.matrix(~ treatment + plasmid + treatment:plasmid, colData(dds))
+mod0 <- model.matrix(~ 1, colData(dds))
+#estimate two surrogate variables
+#svseq <- svaseq(dat, mod, mod0, n.sv = 2)
+#estimate one variable
+#svseq <- svaseq(dat, mod, mod0, n.sv = 1)
+#estimate number of surrogate variables
+svseq <- svaseq(dat, mod, mod0, n.sv=NULL)
+
+ddssva$SV1 <- svseq$sv[,1]
+ddssva$SV2 <- svseq$sv[,2]
+design(ddssva) <- ~ SV1 + SV2 + treatment + plasmid + treatment:plasmid
+
+#remove batch effect for visualisation with limma
+vsd <- vst(ddssva)
+plotPCA(vsd, "experiment")
+#removing experiment batch effect
+assay(vsd) <- limma::removeBatchEffect(assay(vsd), vsd$experiment)
+png(here("images/svg_pca_simple.png"))
+plotPCA(vsd, "experiment")
+dev.off()
+pcaData <- plotPCA(vsd, intgroup=c("treatment", "plasmid", "experiment"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=experiment, shape=treatment, label=plasmid )) +
+  geom_point(size=3) +
+  geom_text(vjust=-1) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+
+#more pca plots
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond.df)
+summary(p)
+
+png(here("images/svg_screeplot.png"))
+screeplot(p, axisLabSize = 18, titleLabSize = 22)
+dev.off()
+
+#biplots
+biplot(p)
+biplot(p, x="PC2", y="PC3", showLoadings = TRUE,
+    labSize = 2, pointSize = 3, sizeLoadingsNames = 3)
+
+#labelled biplots
+source(here("scripts/ggbiplot_pcatools.R"))
+pl1 <-ggbiplot(p, c("PC1", "PC2"), "experiment", "treatment", "plasmid", "right")
+ggsave(here("images/PC1_2.png"))
+#other pcs
+ggbiplot(p, c("PC2", "PC3"), "experiment", "treatment", "plasmid")
+ggsave(here("images/PC2_3.png"))
+pl2 <- ggbiplot(p, c("PC3", "PC4"), "experiment", "treatment", "plasmid", "none")
+ggsave(here("images/PC3_4.png"))
+
+pl_14 <- ggbiplot(p, c("PC1", "PC4"), "experiment", "treatment", "plasmid", "right")
+pl_14
+ggsave(here("images/PC1_4.png"), pl_14)
+
+pca_2 <- grid.arrange(pl1, pl2,ncol=2)
+ggsave(here("images/pc_plots.png"), width=10, height=5, pca_2)
+
+#3D plot (plotly)
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond.df)
+plotobj <- NULL
+plotobj$PC1 <- p$rotated[,"PC1"]
+plotobj$PC2 <- p$rotated[,"PC2"]
+plotobj$PC3 <- p$rotated[,"PC3"]
+plotobj$PC4 <- p$rotated[,"PC4"]
+plotobj$lab <- as.character(p$metadata$experiment)
+plotobj <- as.data.frame(plotobj)
+plotobj$col <- p$metadata$treatment
+plotobj$shape <- p$metadata$plasmid
+var1 <- round(p$variance["PC1"])
+var2 <- round(p$variance["PC2"])
+var3 <- round(p$variance["PC3"])
+var4 <- round(p$variance["PC4"])
+fig <- plot_ly(plotobj, x = ~PC1, y = ~PC2, z = ~PC3, 
+               color = plotobj$col, 
+               colors = c('#636EFA','#EF553B','#00CC96'),
+               symbol = plotobj$shape,
+               symbols = c("circle", "square")) %>%
+  add_markers(size = 12)
+fig <- fig %>%
+  layout(
+    #title = tit,
+    scene = list(bgcolor = "#e5ecf6")
+)
+fig
+
+#pairsplot
+png(here("images/pairs_plot_svg.png"))
+pairsplot(p)
+dev.off()
+
+#plotloadings show top hits
+png(here("images/plotloadings_1to6_svg.png"))
+plotloadings(p, getComponents(p, c(1:6)), labSize = 3)
+dev.off
+
+#heatmap of sample-to-sample distances
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$treatment, vsd$plasmid, sep="-")
+colnames(sampleDistMatrix) <- vsd$experiment
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+png(here("images/svg_sampleDistMatrix.png"))
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
+dev.off()
+
+
+#eigencore plot (looks the same with non-coding)
+#make with all numeric factors (can't use factors fo eigenplot)
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond.df)
+cond_eigen <- cond.df
+cond_eigen$sample <- as.numeric(as.character(cond.df$sample))
+cond_eigen$experiment <- as.numeric(cond.df$experiment)
+cond_eigen$treatment <- as.numeric(cond.df$treatment)
+cond_eigen$plasmid <- as.numeric(cond.df$plasmid)
+p_eigen <- pca(assay(vsd), removeVar = 0.1, metadata = cond_eigen)
+
+pl_ec <- eigencorplot(p_eigen, getComponents(p, 1:6),
+    metavars = c('experiment', 'plasmid','treatment'), corMultipleTestCorrection="BH")
+#experiment is removed by limma so none of the variation correlates with this variable any longer
+png(filename = here("images/svg_eigencorePlot.png"), width = 540)
+pl_ec
+dev.off()
+
+
+#boxplots show better alignment around median dist
+par(mar=c(8,5,2,2))
+boxplot(log10(assays(dds)[["cooks"]]), range=0, las=2, ylab="Cook's dist", xlab="Sample")
+boxplot(log10(assays(ddssva)[["cooks"]]), range=0, las=2, ylab="Cook's dist", xlab="Sample")
+
+#range of cooks distances for this sample similar to other samples
+boxplot(log10(assays(dds)[["counts"]]), range=0, las=2, ylab="log10 Counts", xlab="Sample")
+boxplot(log10(assays(ddssva)[["counts"]]), range=0, las=2, ylab="log 10 Counts", xlab="Sample")
+```
+With pc1,3,4 you can see clustering by induced/vector grouping. What is SV2 and can we get rid of this variation? do we need to? can't put in design?
+
+Look at PC1 v PC4. cluster appropriately, but less difference between sgrna/empty in sample 2 vs other samples. Still a difference however. Perhaps vector induction less sucessful in this sample?
+
+
+Batch correction looks much more successful. Most variation is now down to treatment.
+
+These seem to cluster with experiment so looks like this is the explanation for the surrogate variable. Variation is correlated with experiment (replicate).
+
+Experiment 2 seems kind of like an outlier. 
+PC1 v PC2 (induction): empty non-induced 
+PC2 v PC3 (induction?): empty:induced and sgrna:induced are outliers
+PC3 v PC4 (plasmid): sgrna induced 
+Can we eliminate these samples from further analysis? or whole experiment? mislabelled samples? 
+
+Doesn't show up on boxplots?
+
+Distance between samples puts the experiment2 empty:non-induced as an outlier (sample 8).
+
+In plot loadings in PC1-PC6:
+-- variables retained:
+gene:Rv0073, gene:Rv0074, gene:dcas9, putative_sRNA:m1473149_1473247, putative_sRNA:m1473010_1473079, gene:EBG00000313387, putative_UTR:p82669_82747, gene:Rv0758, putative_sRNA:m852354_852670, gene:Rv2034, gene:Rv3054c, gene:Rv2642, putative_sRNA:m1476314_1476516
+
+Predicted number of surrogate vectors is 1-2--remove both(?) 
+
+can remove experiment variable using limma using tutorial from sva. does this remove all surrogate vectors?
+
+[sva tutorial](https://rdrr.io/bioc/sva/f/inst/doc/sva.pdf)
+
+```{r sva_2vectors}
+library(DESeq2)
+library(limma)
+library(vsn)
+library(sva)
+
+#counts <- readRDS(here("R_data/complete_counts.RData"))
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <- DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+design(dds) <- formula(~ 1 + treatment + plasmid + treatment:plasmid)
+dds <- DESeq(dds) 
+
+dat  <- counts(dds, normalized = TRUE)
+idx  <- rowMeans(dat) > 1
+dat  <- dat[idx, ]
+mod  <- model.matrix(~ treatment + plasmid + treatment:plasmid, colData(dds))
+mod0 <- model.matrix(~ 1, colData(dds))
+
+#estimate number of surrogate variables
+svseq <- svaseq(dat, mod, mod0, n.sv = NULL)
+#estimates two
+
+#estimate number of surrogate variables
+svobj = sva(dat,mod,mod0, n.sv=NULL)
+#1
+num.sv(dat,mod)
+#1
+num.sv(dat, mod, method="leek")
+#8
+
+
+
+```
+
+Need to add these surrogate vectors as columns in dataset and change design. Can produce results controlling for surrogate variables by running DESeq with the new design.
+
+From online bulletin boards:
+
+I ran a likelihood ratio test, but results() only gives me one comparison.
+“… How do I get the p values for all of the variables/levels that were removed in the reduced design?”
+
+This is explained in the help page for ?results in the section about likelihood ratio test p-values, but we will restate the answer here. When one performs a likelihood ratio test, the p values and the test statistic (the stat column) are values for the test that removes all of the variables which are present in the full design and not in the reduced design. This tests the null hypothesis that all the coefficients from these variables and levels of these factors are equal to zero.
+
+The likelihood ratio test p values therefore represent a test of all the variables and all the levels of factors which are among these variables. However, the results table only has space for one column of log fold change, so a single variable and a single comparison is shown (among the potentially multiple log fold changes which were tested in the likelihood ratio test). This is indicated at the top of the results table with the text, e.g., log2 fold change (MLE): condition C vs A, followed by, LRT p-value: ‘~ batch + condition’ vs ‘~ batch’. This indicates that the p value is for the likelihood ratio test of all the variables and all the levels, while the log fold change is a single comparison from among those variables and levels. See the help page for results for more details.
+
+
+```{r batch deseq}
+library(DESeq2)
+library(apeglm)
+
+#counts <- readRDS(here("R_data/complete_counts.RData"))
+counts <- as.matrix(read.delim(here("counts/bh_all_020524_Counts.csv")), sep="\t")
+head(counts)
+colnames(counts) <- seq(1,12)
+dim(counts)
+
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <-DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+
+# use full design for object including experiment as our batch effect
+design(dds) <- formula(~ 1 + experiment + treatment + plasmid + treatment:plasmid)
+
+dds <- DESeq(dds)
+resultsNames(dds)
+#[1] Intercept"                     "experiment_2_vs_1"            
+#[3] "experiment_3_vs_1"             "treatment_induced_vs_non"     
+#[5] "plasmid_sgrna_vs_empty"        "treatmentinduced.plasmidsgrna"
+res <- results(dds)
+summary(res)
+res05 <- res[res$padj < 0.05,]
+res05
+#log2 fold change (MLE): treatmentinduced.plasmidsgrna 
+#Wald test p-value: treatmentinduced.plasmidsgrna 
+#DataFrame with 18 rows and 6 columns
+#18 up, 2 down, no outliers
+DESeq2::plotMA(res, ylim=c(-2,2))
+
+
+#this used to see if model fits better without experiment variable (pvalues)?
+dds_batch <- DESeq(dds, test="LRT", reduced= ~ experiment)
+#dds_batch <- DESeq(dds, test = LRT, reduced = ~  )
+resultsNames(dds_batch) #same as above
+res_batch <- results(dds_batch)
+summary(res_batch)
+#log2 fold change (MLE): treatmentinduced.plasmidsgrna 
+#LRT p-value: '~ 1 + experiment + treatment + plasmid + treatment:plasmid' vs '~ experiment' 
+#equivalent to (default uses last term):
+#res <- results(dds_batch, name="treatmentinduced.plasmidsgrna") 
+res05_batch <- results(dds_batch, alpha = 0.05)
+res05_batch 
+sum(res_batch$padj < 0.05, na.rm=TRUE)
+#756
+# is this saying that there are 750 genes with significant differences depending on whether experiment (batch) term is included 
+
+#consider outliers
+par(mar=c(8,5,2,2))
+boxplot(log10(assays(dds)[["cooks"]]), range=0, las=2, ylab="Cook's dist", xlab="Sample")
+boxplot(log10(assays(dds_batch)[["cooks"]]), range=0, las=2, ylab="Cook's dist", xlab="Sample")
+
+#samples from exp 2 don't seem to have more outliers than other samples
+
+```
+
+Cook's distance measures effect of deleting an observation. 8 doesn't seem too out of line, and when first component removed (svddds) lines up well.
+
+
+Good youtube tutorial:
+
+[video tutorial](https://www.youtube.com/watch?v=X6p3E-QTcUc)
+
+## look at model matrix to define contrasts with added term (experiment)
+
+B0 = intercept
+B1 = experiment_2_vs_1
+B2 = experiment_3_vs_1
+B3 = treatment: induced vs non
+B4 = plasmid: sgrna vs empty
+B5 = treatment:induced.plasmid:sgrna (interaction term)
+
+
+Reduced design:
+B0 = intercept
+B1 = treatment: induced vs non
+B2 = plasmid: sgrna vs empty 
+B3 = treatment:induced.plasmid:sgrna (interaction term)
+
+
+```{r matrix_3factors_batch}
+library(DESeq2)
+library(apeglm)
+library(dplyr)
+library(venneuler)
+library(VennDiagram)
+
+#counts <- readRDS(here("R_data/complete_counts.RData"))
+counts <- as.matrix(read.delim(here("counts/bh_all_020524_Counts.csv")), sep="\t")
+head(counts)
+colnames(counts) <- seq(1,12)
+dim(counts)
+
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <-DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+
+design(dds) <- formula(~ 1 + experiment + plasmid + treatment + treatment:plasmid)
+#design(dds) <- formula(~ 1 + experiment + plasmid + treatment + treatment:experiment + treatment:plasmid) #don't need to do this, not interested in variation due to experiment--don't want to test this
+dds <- DESeq(dds) 
+resultsNames(dds)
+
+#with 1 interaction term
+#[1] "Intercept"                     "experiment_2_vs_1"            
+#[3] "experiment_3_vs_1"             "plasmid_sgrna_vs_empty"       
+#[5] "treatment_induced_vs_non" "plasmidsgrna.treatmentinduced"
+
+#use model madds_asphor#use model matrix solution:
+mod_mat <- model.matrix(design(dds), colData(dds))
+
+# Define coefficient vectors for each condition
+induced_empty <- colMeans(mod_mat[dds$treatment == "induced" & dds$plasmid == "empty", ]) 
+induced_sgrna <- colMeans(mod_mat[dds$treatment == "induced" & dds$plasmid == "sgrna", ]) 
+non_empty <- colMeans(mod_mat[dds$treatment == "non" & dds$plasmid == "empty", ])
+non_sgrna <- colMeans(mod_mat[dds$treatment == "non" & dds$plasmid == "sgrna", ])
+# new ones
+#exp32 <- colMeans(mod_mat[dds$experiment==3 & dds$experiment==2, ])
+#exp12 <- colMeans(mod_mat[dds$experiment==1 & dds$experiment==2, ])
+#exp13 <- colMeans(mod_mat[dds$experiment==1 & dds$experiment==3, ])
+#doesn't work with no interax with treatment and exp because only one dimension
+#also doesn't work with interaction term
+#exp3_induced <- colMeans(mod_mat[dds$treatment=="induced" & dds$experiment==3 )
+
+
+#define contrast vectors
+#B0 = intercept
+#B1 = experiment_2_vs_1
+#B2 = experiment_3_vs_1
+#B3 = plasmid: sgrna vs empty
+#B4 = treatment: induced vs non
+#B5 = treatment:induced.plasmid:sgrna (interaction term)
+
+#B1 
+res1 <- results(dds, name = "experiment_2_vs_1")
+#same as results(dds, contrast = "exp12")
+#log2 fold change (MLE): experiment 2 vs 1 
+#Wald test p-value: experiment 2 vs 1 
+res1_05 <- results(dds, name = "experiment_2_vs_1", independentFiltering=T, alpha = 0.05, pAdjustMethod = "BH")
+res1_05 
+sum(res1$padj < 0.05, na.rm=TRUE)
+#2272
+
+#B2 experiment 3 vs 1
+res2 <- results(dds, name = "experiment_3_vs_1")
+res2_05 <- results(dds, name = "experiment_3_vs_1", independentFiltering=T, alpha = 0.05, pAdjustMethod = "BH")
+summary(res2_05)
+sum(res2$padj <0.05, na.rm=T)
+#4047
+
+#B3 plasmid: sgrna or empty control
+#Null: B3=0 (no difference between the empty plasmids in main condition)
+res3 <- results(dds, contrast = non_sgrna - non_empty, independentFiltering=T, alpha = 0.05, pAdjustMethod = "BH")
+res3 <- results(dds, contrast = list(c( "plasmid_sgrna_vs_empty")))
+summary(res3)
+sum(res3$padj < 0.05, na.rm=T)
+res3_df <- as_tibble(as.data.frame(res3), rownames="gene_locus")
+View(res3_df)
+#0 null is confirmed
+
+#B4 empty vector treatment vs non
+#B4 = 0 (no change with treatment with empty vector)
+res4 <- results(dds, contrast = induced_empty - non_empty)
+res4_05 <- results(dds, contrast = induced_empty - non_empty, independentFiltering=T, alpha = 0.05, pAdjustMethod = "BH")
+summary(res4_05)
+#420
+sum(res4_05$padj < 0.05, na.rm=T)
+res4_05_df <- as_tibble(as.data.frame(res4_05), rownames="gene_locus")
+#equivalent to
+#res4 <- results(dds, contrast = list(c("treatment_induced_vs_non")))
+DESeq2::plotMA(res4, ylim=c(-2,2))
+
+# testing main effect of treatment on sgrna plasmid
+#B3 + B5 = 0 (treatment has no effect on sgrna containing samples)
+res5 <- results(dds, contrast = induced_sgrna - non_sgrna)
+res5_05 <- results(dds, contrast = induced_sgrna - non_sgrna, independentFiltering=T, alpha = 0.05, pAdjustMethod = "BH")
+summary(res5_05)
+sum(res5_05$padj < 0.05, na.rm=T)
+res5_df <- as_tibble(as.data.frame(res5_05), rownames="gene_locus")
+#343
+saveRDS(as_tibble(res5_05, rownames="locus"), here("R_data/comparison5_all_genes.RData"))
+#equiv to 
+#res5_05 <- results(dds, contrast = list(c("treatment_induced_vs_non", "plasmidsgrna.treatmentinduced")), alpha = 0.05)
+
+
+##main condition effect on two different genotypes (difference between induced sgrna and induced empty)
+#null B4 + B5 = 0
+res6 <- results(dds, contrast = induced_sgrna - induced_empty)
+res6_05 <- results(dds, contrast = induced_sgrna - induced_empty, independentFiltering=T, alpha = 0.05, pAdjustMethod = "BH")
+sum(res6_05$padj < 0.05, na.rm=TRUE)
+summary(res6_05)
+res6_df <- as_tibble(as.data.frame(res6_05), rownames="gene_locus")
+#29
+#equivalent to
+#res6_05 <- results(dds, contrast = list(c("plasmid_sgrna_vs_empty", "plasmidsgrna.treatmentinduced")))
+saveRDS(as_tibble(res6_05, rownames="locus"), here("R_data/comparison6_all_genes.RData"))
+#res6_05 <- readRDS(here("R_data/comparison6_all_genes.RData"))
+write_csv(res6_05, here("output/Atc_sgrna_Atc_empty.csv"))
+
+#is the effect of treatment DIFFERENT depending on plasmid (interaction effect)
+#NULL: B5 = 0
+res7 <- results(dds, contrast = (induced_sgrna - induced_empty) - (non_sgrna - non_empty))
+res7_05 <- results(dds, contrast = (induced_sgrna - induced_empty) - (non_sgrna - non_empty), independentFiltering=T, alpha = 0.05, pAdjustMethod = "BH")
+sum(res7_05$padj < 0.05, na.rm = T)
+summary(res7_05)
+#19, 14 up, 5 down
+saveRDS(as_tibble(res7_05, rownames="locus"), here("R_data/comparison7_all_genes.RData"))
+
+res7_df <- as.data.frame(res7)
+res7_df <- as_tibble(res7_df, rownames = "gene_locus")
+write_csv(res7_df, here("output/interaction_allData_batch.csv"))
+res_interax_df <- as_tibble(res7_df) %>% filter(padj < 0.05) %>% arrange(log2FoldChange)
+write_csv(res_interax_df, here("output/interaction_hits_batch.csv"))
+
+View(res_interax_df)
+saveRDS(res7_df, here("R_data/batch_dds_results.RData"))
+
+DESeq2::plotMA(res7, ylim=c(-2,2))
+
+# plotCounts(dds, gene=which.min(res7$padj), intgroup="treatment")
+# #Rv0073, half of induced high half low
+# plotCounts(dds, gene=which.min(res7$padj), intgroup="plasmid")
+# 
+# #shows interaction--all sgrna-induced samples higher but also non-induced empty vector are higher than induced empty vector?
+# plotCounts(dds, gene="gene:Rv0073", intgroup="treatment")
+# plotCounts(dds, gene="gene:Rv0073", intgroup="plasmid")
+# plotCounts(dds, gene="gene:Rv0076c", intgroup="treatment")
+# plotCounts(dds, gene="gene:Rv0076c", intgroup="plasmid")
+# 
+# plotCounts(dds, gene=which.max(res7$log2FoldChange), intgroup="treatment")
+# plotCounts(dds, gene=which.max(res7$log2FoldChange), intgroup="plasmid")
+# #also shows interaction
+# 
+# 
+# plotCounts(dds, gene="gene:Rv0758", intgroup="plasmid")
+# plotCounts(dds, gene="gene:Rv0758", intgroup="treatment")
+# plotCounts(dds, gene = "putative_sRNA:m852286_852683", intgroup="plasmid")
+# plotCounts(dds, gene = "putative_sRNA:m852286_852683", intgroup="treatment")
+# 
+# plotCounts(dds, gene = "putative_sRNA:p1766474_1766851", intgroup="plasmid")
+# plotCounts(dds, gene = "putative_sRNA:p1766474_1766851", intgroup="treatment")
+
+png("images/MAplot_interax.png")
+DESeq2::plotMA(res7, ylim=c(-2,2), cex=1)
+abline(h=c(-1,1), col="dodgerblue", lwd=2)
+dev.off()
+
+#compare genes in sgrna ATc+ vs ATc- (res5_05) and empty ATc+ vs ATc- (res4_05)
+genes_5 <- as_tibble(res5, rownames="locus") %>% filter(padj < 0.05)
+nrow(genes_5) #352
+#is phoP or phoR in here?
+#yes phoR is significantly DR (lfc = -1.25218)
+saveRDS(as_tibble(res5, rownames="locus"), here("R_data/comparison5_all_genes.RData"))
+#res5 <- readRDS(here("R_data/comparison5_all_genes.RData"))
+write_csv(res5, here("output/sgrna_ATc_treatment.csv"))
+
+genes_4 <- as_tibble(res4, rownames="locus") %>% filter(padj < 0.05)
+saveRDS(as_tibble(res4, rownames="locus"), here("R_data/comparison4_all_genes.RData"))
+res4<-readRDS(here("R_data/comparison4_all_genes.RData"))
+write_csv(res4, here("output/empty_ATc_treatment.csv"))
+
+nrow(genes_4) #417
+#is phoP or phoR?
+# no, not changed by ATc
+
+length(intersect(genes_5$locus, genes_4$locus))
+#175 in both
+length(union(genes_5$locus, genes_4$locus))
+#594 in either
+
+genes_6 <- as_tibble(res6, rownames="locus") %>% filter(padj < 0.05)
+nrow(genes_6)
+
+#venn diagram of ATc treated sets
+vp <- venneuler(c(control = 420, sgRNA2 = 343, `control&sgRNA2` = 175))
+plot(vp)
+
+venn.diagram(list(control = genes_4$locus, sgRNA2 = genes_5$locus),
+             filename = here("images/atc_venn.png"),
+             output = T,
+             fill = c("lightgreen", "lightblue"),
+             col = "transparent",
+             cat.cex = 1.5,
+             #cat.dist = c(0.06, 0.06),
+             #cat.pos = -2,
+             margin = .05,
+             disable.logging = T
+             )
+
+
+#add in res6 which is genes changed with ATC in sgrna
+venn.diagram(list(control = genes_4$locus, sgRNA2 = genes_5$locus, ATc_sgRNA = genes_6$locus),
+             filename = here("images/atc_venn_3way.png"),
+             output = T,
+             fill = c("lightgreen", "lightblue", "violet"),
+             col = "transparent",
+             cat.cex = 1.5,
+             #cat.dist = c(0.06, 0.06),
+             #cat.pos = -2,
+             margin = .05,
+             disable.logging = T
+             )
+
+```
+Is DESEQ2 appropriate? assumes mean gene expression is the same for conditions compared. this might not be true for ATc+ vs ATc- but should be true for ultimate comparison as assumes effect of ATc is similar for both genotypes and just looking for outliers.
+
+Is there any enrichment in the genes changed in ATC+ in either? could do with all genes with log2 fold changes instead of just significant
+
+clusterProfiler uses fgsea and pre-ranked gene lists
+
+```{r GSEA_atc}
+library(clusterProfiler)
+library(dplyr)
+library(pathview)
+library(rtracklayer)
+
+#GO terms read in terms
+term_gene <- read_tsv(here("GSEA_files/H37Rv_GO_terms.txt"), col_names = F, show_col_types = F)
+names(term_gene) <- c("gene", "term")
+#switch order
+term_gene <- term_gene %>% relocate(term, .before=gene)
+term_name <- read_tsv(here("GSEA_files/GO_term_names.dat"),
+                      col_names = F, show_col_types = F)
+names(term_name) <- c("term", "name")
+
+#convert to entrez gene names
+#need Entrez gene ids for KEGG
+my_filter <- list(type=c("gene"))
+gff <- readGFF(file="~/myco_projects/ref_seqs/Mtb/GCF_000195955.2_ASM19595v2_genomic.gff", tags=c("ID",  "Name", "Dbxref"), filter=my_filter)
+Rv.to.Entrez<- as.data.frame(cbind(unlist(sub(".*\\-", "", gff$ID)), unlist(sub(".*\\:", "", gff$Dbxref))))
+colnames(Rv.to.Entrez) <- c("locus", "entrez")
+
+
+#read in gene sets
+#genes for ATC with sgrna, filter for pc only
+genes_5 <- readRDS(here("R_data/comparison5_all_genes.RData")) %>% filter(grepl("gene:", locus))
+genes_5$locus <- sub("gene:", "", genes_5$locus)
+genes_5 <- left_join(genes_5, Rv.to.Entrez, by=c("locus"))
+#genes for ATC with empty
+genes_4 <- readRDS(here("R_data/comparison4_all_genes.RData")) %>% filter(grepl("gene:", locus))
+genes_4$locus <- sub("gene:", "", genes_4$locus)
+genes_4 <- left_join(genes_4, Rv.to.Entrez, by=c("locus"))
+#genes for ATC sgrna vs empty
+genes_6 <- readRDS(here("R_data/comparison6_all_genes.RData")) %>% filter(grepl("gene:", locus))
+genes_6$locus <- sub("gene:", "", genes_6$locus)
+genes_6 <- left_join(genes_6, Rv.to.Entrez, by=c("locus"))
+#interaction
+genes_7 <- readRDS(here("R_data/comparison7_all_genes.RData")) %>% filter(grepl("gene:", locus))
+genes_7$locus <- sub("gene:", "", genes_7$locus)
+genes_7 <- left_join(genes_7, Rv.to.Entrez, by=c("locus"))
+
+ATC_both <- genes_5 %>% filter(locus %in% genes_4$locus)
+
+#make ranked list of genes by LFC for sgrna compare and do GSEA
+genes_lfc_vec5 <-genes_5$log2FoldChange
+names(genes_lfc_vec5) <- genes_5$locus
+ranked_genes_lfc5 <- sort(genes_lfc_vec5, decreasing=TRUE)
+set.seed(2020)
+gsea_res5 <- GSEA(geneList = ranked_genes_lfc5, TERM2GENE = term_gene, TERM2NAME = term_name)
+gsea_res5
+#list of GO terms that were enriched for ATC+sgrna
+gsea_res5$ID #GO:0006950
+gsea_res5$Description #response to stress
+gsea_res5$core_enrichment
+
+#sorted by signed-log-p-value, SLPV=sign(LFC)*(log(pval))
+#first have to change zero pvalues to avoid Inf numbers
+genes_5$padj[genes_5$padj==0] <- 0.000001
+genes_5$pvalue[genes_5$pvalue==0] <- 0.000001
+genes_slpv5 <- genes_5 %>% mutate(slpv = log2FoldChange*(log(pvalue)))
+genes_slpv_vec5 <- genes_slpv5$slpv
+names(genes_slpv_vec5) <- sub("gene:", "", genes_slpv5$locus)
+ranked_genes_slpv5 <- sort(genes_slpv_vec5, decreasing = TRUE)
+gsea_slpv5 <- GSEA(geneList = ranked_genes_slpv5, TERM2GENE = term_gene, TERM2NAME = term_name)
+#no term enriched under specific pvalueCutoff...
+
+
+#make ranked list of genes by LFC for comparison 4 (empty vector ATC+ vs ATC-)
+genes_lfc_vec4 <-genes_4$log2FoldChange
+names(genes_lfc_vec4) <- sub("gene:", "", genes_4$locus)
+ranked_genes_lfc4 <- sort(genes_lfc_vec4, decreasing=TRUE)
+gsea_res4 <- GSEA(geneList = ranked_genes_lfc4, TERM2GENE = term_gene, TERM2NAME = term_name)
+gsea_res4
+#list of GO terms that were enriched for ATC+ empty
+gsea_res4$ID 
+#93 enrichment terms found
+gsea_res4$Description 
+gsea_res4$Description[1] #quinone binding
+gsea_res4$core_enrichment[1] #nuo NADH dehydrogenases
+
+#sorted by signed-log-p-value, SLPV=sign(LFC)*(log(pval))
+#first have to change zero pvalues to avoid Inf numbers
+genes_4$padj[genes_4$padj==0] <- 0.000001
+genes_4$pvalue[genes_4$pvalue==0] <- 0.000001
+genes_slpv4 <- genes_4 %>% mutate(slpv = log2FoldChange*(log(pvalue)))
+genes_slpv_vec4 <- genes_slpv4$slpv
+names(genes_slpv_vec4) <- sub("gene:", "", genes_slpv4$locus)
+ranked_genes_slpv4 <- sort(genes_slpv_vec4, decreasing = TRUE)
+gsea_slpv4 <- GSEA(geneList = ranked_genes_slpv4, TERM2GENE = term_gene, TERM2NAME = term_name)
+#no term enriched under specific pvalueCutoff...
+
+#do again with COG terms instead?
+COG_gene <- read_tsv(here("GSEA_files/H37Rv_COG_roles.dat"), skip=1, col_names = F, show_col_types = F)
+names(COG_gene) <- c("gene", "role", "name", "role_descr")
+#switch order
+COG_gene <- COG_gene %>% select(gene, role) %>% relocate(role, .before=gene)
+COG_name <- read_tsv(here("GSEA_files/COG_roles.dat"),
+                      col_names = F, show_col_types = F)
+names(COG_name) <- c("role", "role_descr")
+
+gsea_res4_cog <- GSEA(geneList = ranked_genes_lfc4, TERM2GENE = COG_gene, TERM2NAME = COG_name)
+gsea_res4_cog
+#2 enriched terms: defense mechanisms, replication,recombination and repair
+gsea_res4_cog$Description
+gsea_res4_cog$core_enrichment
+#defense mech include Rv0072,Rv0073
+
+gsea_res5_cog <- GSEA(geneList = ranked_genes_lfc5, TERM2GENE = COG_gene, TERM2NAME = COG_name)
+#none enriched
+
+
+#kegg pathways
+keg_term_names <- read_tsv(here("GSEA_files/kegg_pathways_mtb.txt"), comment="#", col_names = F, show_col_types = F)
+names(keg_term_names) <- c("term", "name")
+#get rid of appended genome name at end of description
+keg_term_names$name <- str_split_i(keg_term_names$name, " - ", 1)
+
+keg_gene_terms <- read_tsv(here("GSEA_files/kegg_mappings_mtb.txt"), comment='#', col_names = F, show_col_types = F)
+names(keg_gene_terms) <- c("gene", "term")
+#str_split_i returns only single piece from string--negative selects from end
+keg_gene_terms$gene <- str_split_i(keg_gene_terms$gene, ":", -1)
+keg_gene_terms$term <- str_split_i(keg_gene_terms$term, ":", -1)
+#switch order
+keg_gene_terms <- keg_gene_terms %>% relocate(gene, .after=term)
+
+gsea_res4_kegg <- GSEA(geneList = ranked_genes_lfc4, TERM2GENE = keg_gene_terms, TERM2NAME = keg_term_names)
+gsea_res4_kegg
+browseKEGG(gsea_res4_kegg, "mtu00190")
+#3 enriched terms: "ABC transporters" "Oxidative phosphorylation" "Homologous recombination"
+#gseKEGG(ranked_genes_lfc4, "mtu")
+#same 3 enriched terms
+#kegg 'modules'
+gseMKEGG(ranked_genes_lfc4, "mtu")
+#"NADH:quinone oxidoreductase, prokaryotes"
+
+genes_lfc_vec4 <-genes_4$log2FoldChange
+names(genes_lfc_vec4) <- genes_4$entrez
+ranked_genes_lfc4 <- sort(genes_lfc_vec4, decreasing=TRUE)
+
+#library("pathview") 
+mtu00190 <- pathview(gene.data  = ranked_genes_lfc4,
+                     pathway.id = "mtu00190",
+                     species    = "mtu",
+                     limit      = list(gene=max(abs(ranked_genes_lfc4)), cpd=1))
+
+
+
+gsea_res5_kegg <- GSEA(geneList = ranked_genes_lfc5, TERM2GENE = keg_gene_terms, TERM2NAME = keg_term_names)
+#0 enriched terms found
+gseMKEGG(ranked_genes_lfc5, "mtu")
+#0 enriched modules
+
+#for atc sgrna vs atc empty
+#make ranked list of genes by LFC for comparison 6 (ATC+ empty vs sgrna)
+genes_lfc_vec6 <-genes_6$log2FoldChange
+names(genes_lfc_vec6) <- sub("gene:", "", genes_6$locus)
+ranked_genes_lfc6 <- sort(genes_lfc_vec6, decreasing=TRUE)
+gsea_res6 <- GSEA(geneList = ranked_genes_lfc6, TERM2GENE = term_gene, TERM2NAME = term_name)
+gsea_res6
+#list of GO terms that were enriched for ATC+sgrna
+gsea_res6$ID 
+#1 enrichment terms found
+gsea_res6$Description #SOS response
+gsea_res6_cog <- GSEA(geneList = ranked_genes_lfc6, TERM2GENE = COG_gene, TERM2NAME = COG_name)
+gsea_res6_cog
+# 1 terms: "Defense mechanisms" 
+gsea_res6_kegg <- GSEA(geneList = ranked_genes_lfc6, TERM2GENE = keg_gene_terms, TERM2NAME = keg_term_names)
+gsea_res6_kegg
+#3 terms "ABC transporters" "Oxidative phosphorylation" "Tuberculosis"
+#"mtu02010" "mtu00190" "mtu05152"
+gseMKEGG(ranked_genes_lfc6, "mtu")
+#"NADH:quinone oxidoreductase, prokaryotes"
+kk <- gseKEGG(ranked_genes_lfc6, 'mtu')
+browseKEGG(kk, "mtu05152")
+
+
+#kegg enrichment (not gsea) for gene list in common with ATC treatment in both plasmids
+res <- enrichKEGG(ATC_both$locus, "mtu")
+res$ID
+#"mtu01110" "mtu01120" "mtu01240"
+res$Description
+#1] "Biosynthesis of secondary metabolites - Mycobacterium tuberculosis H37Rv"       
+#[2] "Microbial metabolism in diverse environments - Mycobacterium tuberculosis H37Rv"
+#[3] "Biosynthesis of cofactors - Mycobacterium tuberculosis H37Rv" 
+
+
+#gsea with fold change instead of l2fc
+genes_lfc_vec6 <- -(2^(genes_6$log2FoldChange))
+names(genes_lfc_vec6) <- genes_6$locus
+ranked_genes_lfc6 <- sort(genes_lfc_vec6, decreasing=TRUE)
+gsea_res6_kegg <- GSEA(geneList = ranked_genes_lfc6, TERM2GENE = keg_gene_terms, TERM2NAME = keg_term_names)
+gsea_res6_kegg$ID
+#"mtu02010" "mtu00190" "mtu02020" "mtu05152" "mtu01110" "mtu03010" "mtu00860"
+gsea_res6_kegg@result
+
+#library("pathview") 
+genes_lfc_vec6 <- genes_6$log2FoldChange
+names(genes_lfc_vec6) <- genes_6$entrez
+ranked_genes_lfc6 <- sort(genes_lfc_vec6, decreasing=TRUE)
+
+mtu_05152 <- pathview(gene.data  = ranked_genes_lfc6,
+                     pathway.id = "mtu05152",
+                     species    = "mtu",
+                     limit      = list(gene=max(abs(ranked_genes_lfc6)), cpd=1))
+mtu_02020 <- pathview(gene.data  = ranked_genes_lfc6,
+                     pathway.id = "mtu02020",
+                     species    = "mtu",
+                     limit      = list(gene=max(abs(ranked_genes_lfc6)), cpd=1))
+
+
+
+#make ranked list of genes by LFC for comparison 7 (ATC+/-: empty/sgrna interaction)
+genes_lfc_vec7 <-genes_7$log2FoldChange
+names(genes_lfc_vec7) <- sub("gene:", "", genes_7$locus)
+ranked_genes_lfc7 <- sort(genes_lfc_vec7, decreasing=TRUE)
+gsea_res7_kegg <- GSEA(geneList = ranked_genes_lfc7, TERM2GENE = keg_gene_terms, TERM2NAME = keg_term_names)
+gsea_res7_kegg
+#"mtu01240" "mtu02010" "mtu03440"
+#"Biosynthesis of cofactors" "ABC transporters" "Homologous recombination"
+kk <- gseKEGG(ranked_genes_lfc7, 'mtu')
+browseKEGG(kk, "mtu01240")
+
+gsea_res7_cog <- GSEA(geneList = ranked_genes_lfc7, TERM2GENE = COG_gene, TERM2NAME = COG_name)
+gsea_res7_cog
+#"Defense mechanisms" "Coenzyme transport and metabolism" "Amino acid transport and metabolism"
+gsea_res7 <- GSEA(geneList = ranked_genes_lfc7, TERM2GENE = term_gene, TERM2NAME = term_name)
+gsea_res7
+#36 terms enriched 
+#"cellular response to DNA damage stimulus" "SOS response" "organonitrogen compound biosynthetic process"
+gseMKEGG(ranked_genes_lfc7, "mtu")
+#"NADH:quinone oxidoreductase, prokaryotes"
+
+genes_lfc_vec7 <- genes_7$log2FoldChange
+names(genes_lfc_vec7) <- genes_7$locus
+ranked_genes_lfc7 <- sort(genes_lfc_vec7, decreasing=TRUE)
+gsea_res7_kegg <- GSEA(geneList = ranked_genes_lfc7, TERM2GENE = keg_gene_terms, TERM2NAME = keg_term_names)
+gsea_res7_kegg$ID
+#"mtu01240" "mtu02010" "mtu03440" "mtu00450"
+gsea_res7_kegg
+
+#can't do this, lose directionality
+#genes_lfc_vec7 <- 2^(genes_7$log2FoldChange)
+genes_lfc_vec7 <- 10*genes_7$log2FoldChange
+names(genes_lfc_vec7) <- genes_7$entrez
+ranked_genes_lfc7 <- sort(genes_lfc_vec7, decreasing=TRUE)
+
+#this one is not enriched for this data?
+#mtu_02020 <- pathview(gene.data  = ranked_genes_lfc7,
+#                     pathway.id = "mtu02020",
+#                     species    = "mtu",
+#                     limit      = list(gene=max(abs(ranked_genes_lfc7)), cpd=1))
+#synthesis of cofactors
+mtu_01240 <- pathview(gene.data  = ranked_genes_lfc7,
+                     pathway.id = "mtu01240",
+                     species    = "mtu",
+                     limit      = list(gene=max(abs(ranked_genes_lfc7)), cpd=1))
+#Error in array(col.rgb[, i], dim(node.rgb)[3:1]) : 
+#  negative length vectors are not allowed
+
+#abc transporters
+mtu_02010 <- pathview(gene.data  = ranked_genes_lfc7,
+                     pathway.id = "mtu02010",
+                     species    = "mtu",
+                     limit      = list(gene=max(abs(ranked_genes_lfc7)), cpd=1))
+
+#tuberculosis (not enriched for this data?)
+# mtu_05152_7 <- pathview(gene.data  = ranked_genes_lfc7,
+#                      pathway.id = "mtu05152",
+#                      species    = "mtu",
+#                      limit      = list(gene=max(abs(ranked_genes_lfc7)), cpd=1))
+
+#homologous recombination
+mtu_03440 <- pathview(gene.data = ranked_genes_lfc7,
+                      pathway.id = "mtu03440",
+                      species = "mtu",
+                      limit = list(gene=max(abs(ranked_genes_lfc7)), cpd=1))
+
+
+
+#enrichment in gene set that is in common between comparison 4 and 5? 
+#kegg pathway enrichment (overrepresentation)
+sig5 <- genes_5 %>% filter(padj < 0.05) %>% select(locus) %>% pull()
+sig4 <- genes_4 %>% filter(padj < 0.05) %>% select(locus) %>% pull()
+gene_set <- sub("gene:", "", intersect(sig5, sig4))
+enrichkk <- enrichKEGG(gene         = gene_set,
+                 organism     = 'mtu',
+                 pvalueCutoff = 0.05)
+kk
+#same as KEGG enrichment for comparison of hits (comparison 7)
+#"Homologous recombination - Mycobacterium tuberculosis H37Rv" "ABC transporters - Mycobacterium tuberculosis H37Rv" "Biosynthesis of cofactors - Mycobacterium tuberculosis H37Rv"
+```
+
+
+
+
+```{r volcano_plot_res}
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+
+res <- read_csv(here("output/interaction_allData_batch.csv"))
+
+pl_df <- res %>% mutate(signif = padj<0.054)
+
+#volcano plot of results
+ggplot(pl_df) +
+  geom_point(aes(x=log2FoldChange, y=-log10(padj), color=signif)) +
+  scale_colour_manual(name = "signif",values = c("black", "blue")) +
+  xlab("log2 fold change") + 
+  ylab("-log10 adjusted p-value") +
+  theme(legend.position = "none") +
+  geom_vline(xintercept = 0.5, color="red")+
+  geom_vline(xintercept = -0.5, color="red")
+  
+
+#Add two new cols, one to cap the x values (log2FC), one to flag the ones outside the limit of y axis:
+lim <- 30 # limit y axis
+#offset <- 0.1 # the amount to offset the red points from the limit. 
+pl_df2 <- pl_df %>% mutate(padj2 = ifelse(-log10(padj) > lim, lim, -log10(padj)), flag = -log10(padj) > lim)
+pl_df2 <- pl_df2 %>% mutate(name=ifelse(signif==T, sub("gene:", "", gene_locus), "")) %>% mutate(name=(sub(":\\w+$", "", name)))
+pl_df3 <- pl_df2 %>% mutate(name = case_when(
+    gene_locus == "putative_sRNA:m852286_852683" ~ "as_phor",
+    gene_locus == "putative_sRNA:m1073103_1073304" ~ "as_Rv0959",
+    gene_locus == "putative_sRNA:p1766474_1766851" ~ "as_treZ",
+    TRUE ~ name  # Keep other values unchanged
+))
+
+ggplot(pl_df3, aes(label=name)) +
+  geom_point(data = pl_df3 %>% filter(flag==F), aes(x=log2FoldChange, y=-log10(padj), colour=signif), size=2) +
+  geom_point(data = pl_df3 %>% filter(flag==T), aes(x =log2FoldChange, y = padj2), shape=2, colour="blue", size=2) +
+  scale_colour_manual(name = "signif",values = c("black", "blue")) +
+  geom_text_repel(data=subset(pl_df3, padj<0.054 & flag==F),
+            aes(x=log2FoldChange,y=-log10(padj),label=name), min.segment.length = 0.2, size=4, force=4, force_pull = 2, ylim=c(1,35)) +
+  geom_text_repel(data=subset(pl_df3, padj<0.054 & flag==T),
+            aes(x=log2FoldChange,y=lim,label=name), min.segment.length = 0.2, size=4, force=4) +
+  ylim(-1,35) +
+  xlab("log2 fold change") + 
+  ylab("-log10 adjusted p-value") +
+  theme(legend.position = "none") +
+  geom_vline(xintercept = 0.5, color="red", size=0.3)+
+  geom_vline(xintercept = -0.5, color="red", size=0.3) +
+  #geom_hline(yintercept = 2, linetype="dotted") +
+  ggtitle("Statistically significant (padj < 0.05) log2 fold changes > 0.5")
+
+ggsave(here("images/volcano_05_thesis.png"), height = 7, width = 9)
+
+
+#without UTRs and hits < 0.5lfc
+dlet <- "putative_UTR"
+pl <- pl_df3 %>% filter(!grepl("putative_UTR", gene_locus))
+
+ggplot(pl, aes(label=name)) +
+  geom_point(data = pl %>% filter(flag==F), aes(x=log2FoldChange, y=-log10(padj), colour=abs(log2FoldChange) > 0.5 & signif==T), size=3) +
+  geom_point(data = pl %>% filter(flag==T & abs(log2FoldChange) > 0.5), aes(x =log2FoldChange, y = padj2), shape=2, colour="blue", size=3) +
+  scale_colour_manual(name = "signif",values = c("black", "blue")) +
+  geom_text_repel(data=subset(pl, padj<0.054 & flag==F  & 
+                                abs(log2FoldChange) > 0.5),
+            aes(x=log2FoldChange,y=-log10(padj),label=name), min.segment.length = 0.2, size=4, force=2) +
+  geom_text_repel(data=subset(pl, padj<0.054 & flag==T),
+            aes(x=log2FoldChange,y=lim,label=name), min.segment.length = 0.2, size=3, force=3) +
+  xlab("log2 fold change") + 
+  ylab("-log10 adjusted p-value") +
+  theme(legend.position = "none") +
+  geom_vline(xintercept = 0.5, color="red", size=0.3)+
+  geom_vline(xintercept = -0.5, color="red", size=0.3) +
+  #geom_hline(yintercept = 2, linetype="dotted") +
+  ggtitle("Statistically significant (padj < 0.05) log2 fold changes > 0.5")
+
+ggsave(here("images/volcano_05_slide.png"), height = 7, width = 9)
+
+
+```
+
+See how the gene hits differ within the samples
+
+```{r plot_counts_vsd}
+library(ggh4x)
+library(ggplot2)
+library(sva)
+library(limma)
+library(DESeq2)
+library(tidyverse)
+#using plotCounts doesn't correct for batch effect in model (also not sure if it is returning normalised counts), use vsd limma corrected for visualisation
+
+#counts <- readRDS(here("R_data/complete_counts.RData"))
+counts <- as.matrix(read.delim(here("counts/bh_all_020524_Counts.csv")), sep="\t")
+colnames(counts) <- seq(1,12)
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <-DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+design(dds) <- formula(~ 1 + experiment + plasmid + treatment + treatment:plasmid)
+
+#remove batch effect for visualisation with limma
+vsd <- vst(dds)
+assay(vsd) <- limma::removeBatchEffect(assay(vsd), vsd$experiment)
+vsd.df <- as_tibble(assay(vsd), rownames="feature", names_prefix="sample_") 
+vsd.df <- pivot_longer(vsd.df, cols=c(2:13), names_to="sample", values_to="count")
+metadata <- tibble(plasmid=vsd$plasmid, treatment=vsd$treatment, experiment=vsd$experiment, sample=as.character(vsd$sample))
+vsd.df <- left_join(vsd.df, metadata, by = join_by(sample))
+vsd.df <- vsd.df %>% mutate(treatment = case_when(treatment == 'induced' ~ 'ATc-treated',
+  treatment == 'non' ~ 'untreated',),
+  plasmid = case_when(plasmid == 'sgrna' ~ 'MTBdcas9_sgRNA',
+  plasmid == 'empty' ~ 'MTBdcas9_ctrl')) %>%
+  dplyr::rename("strain" = "plasmid")
+#make plot
+gggenecounts_plot <- function(geneSet, dds){
+   require(ggplot2)
+  df <- dds %>% filter(feature %in% geneSet) %>%
+    group_by(feature, strain, treatment) %>% 
+    mutate(mean_grp = mean(count))
+  ggplot(df, aes(x = interaction(treatment,strain, sep = "!"), y = count)) +
+    geom_segment(position=position_dodge(width=0.5),
+                 aes(x=as.numeric(interaction(treatment,strain, sep = "!")) - 0.1,
+                     xend=as.numeric(interaction(treatment,strain, sep = "!")) + 0.1,
+                     y= mean_grp, yend=mean_grp)) +
+    geom_jitter(
+      position=position_jitterdodge(dodge.width=0.25),
+      size=2, aes(color=experiment)) +
+    scale_x_discrete(guide = guide_axis_nested(delim = "!"),
+                     name = "induction aTc") +
+    facet_grid(feature~., scales="fixed") +
+    theme(axis.title.x = element_blank(),
+          axis.text.x = element_text(size = 12, colour = "black"),
+          strip.text = element_text(size = 12, colour = "black"),
+          axis.title.y = element_text(size = 12),
+          legend.position = "none") +
+    ylab("normalised counts")
+}
+
+
+
+gene_set1 <- c("gene:Rv0072", "gene:Rv0073", "gene:Rv0074", "gene:Rv0075")
+gggenecounts_plot(gene_set1, vsd.df)
+# pl
+ggsave(here("images/plot_counts_ABCtrx.png"), width = 6, height=8)
+  
+#for phoPR
+gene_set2 <- c("gene:Rv0757", "gene:Rv0758", "putative_sRNA:m852286_852683")
+#make plot
+gggenecounts_plot(gene_set2, vsd.df)
+ggsave(here("images/plot_counts_phopr.png"), height=8)
+
+
+gene_set3 <- c("gene:Rv0143c", "putative_UTR:m168648_168703") 
+#Rv3159c PPE53 not signif lfc
+
+gene_set4 <- c("gene:Rv3157", "gene:Rv3158")
+
+gggenecounts_plot(gene_set3, vsd.df)
+ggsave(here("images/counts_plots_Rv0143c.png"),  width=6, height = 8)
+
+gggenecounts_plot(gene_set4, vsd.df)
+ggsave(here("images/counts_plots_nuoNM.png"), width=6, height = 8)
+
+gene_set5 <- c("gene:Rv1230c", "gene:Rv0634c")
+gggenecounts_plot(gene_set5, vsd.df)
+
+gggenecounts_plot("gene:Rv0991c", vsd.df)
+ggsave(here("images/counts_plot_Rv0991c.png"))
+
+gggenecounts_plot("gene:Rv0314c", vsd.df)
+ggsave(here("images/counts_plot_Rv0314c.png"))
+
+#antisense trez
+
+#for antisense treZ
+gggenecounts_plot("putative_sRNA:p1766474_1766851", vsd.df)
+ggsave(here("images/counts_plot_antisenseTrez.png"))
+
+gggenecounts_plot("putative_sRNA:m1073103_1073304", vsd.df)
+ggsave(here("images/counts_plot_antisense_Rv0959.png"))
+```
+
+
+No longer a hit with stranded quantification:
+Rv0991c upregulated in induced sgrna condition. conserved serine-rich protein.
+"mRNA identified by DNA microarray analysis and up-regulated at high temperatures, and possibly down-regulated by hrcA|Rv2374c (see citation below). DNA microarrays detect expression in M. tuberculosis H37Rv in vivo (in BALB/c and SCID mice) but not in vitro (in 7H9 medium) (See Talaat et al., 2004)."
+
+Not essential in vitro or attenuated in vivo
+
+using info from modules paper:
+
+Rv0991c is highly expressed in dormancy (w/fa and w/dextrose), dextrose stationary, hypoxia-day0, low iron (1 week), low acid, butyrate (+/- glucose)
+
+it is in purple module which has 100+ genes which is enriched for functional category 'virulence, detoxification, adaptation, insertion seqs and phages'
+
+
+
+Plot of log fold changes in these operons of interest?
+
+[tutorial for plots](https://hbctraining.github.io/Intro-to-R-with-DGE/lessons/B1_DGE_visualizing_results.html)
+
+
+```{r lfc plots}
+library(dplyr)
+library(ggplot2)
+library(RColorBrewer)
+library(colorspace)
+library(grid)
+
+#read in results
+res <- read_csv(here("output/interaction_allData_batch.csv"))
+res
+
+#how many with lfc > 0.5
+res %>% filter(log2FoldChange >= 0.5)
+#19 one utr not significant
+
+table <- res %>% mutate(fold_change = 2^log2FoldChange) %>% select(gene_locus, log2FoldChange, fold_change, padj) %>% filter(padj < 0.05 & gene_locus != grepl("putative_UTR", gene_locus))
+
+#gene sets
+gene_set1 <- c("gene:Rv0072", "gene:Rv0073","putative_UTR:p82669_82747", "gene:Rv0074", "gene:Rv0075",  "putative_UTR:p85169_85508","gene:Rv0076c")
+
+#for phoPR
+gene_set2 <- c("gene:Rv0757",  "putative_sRNA:m852286_852683","gene:Rv0758", "putative_UTR:m853690_853824", "gene:Rv0759c")
+
+gene_set3 <- c("gene:Rv0142", "putative_UTR:m168648_168703","gene:Rv0143c") 
+
+#Rv3159c PPE53 not signif lfc
+gene_set4 <- c("gene:Rv3157", "gene:Rv3158", "putative_sRNA:m3526648_3526832", "putative_UTR:m3527282_3527390",  "gene:Rv3159c")
+
+l2fc_plots <- function(results, geneSet, gen_labels=geneSet){
+  df <- results %>% filter(gene_locus %in% geneSet) %>% 
+    mutate(sig=ifelse(padj<0.54,"Y", "N"), dir=log2FoldChange > 0)
+  df$gene_locus <- factor(df$gene_locus, levels=rev(geneSet))
+  #df$gene_labels <- factor(gen_labels, levels=gene_labels)
+  ggplot(df, aes(x=gene_locus, y=log2FoldChange, fill=dir)) +
+    geom_bar(stat="identity", show.legend = F) +
+    scale_fill_brewer(palette="Set2") +
+    #scale_fill_manual(values=c("yellow", "blue")) +
+    geom_text(aes(label = c(ifelse(sig=="Y", "**", "")),  
+                  size=14, family="serif", fontface="bold"), hjust = 0) +
+    #geom_text(aes(label = c("*"), size=14, family="serif", fontface="bold"), hjust=0) +
+    scale_x_discrete(breaks=df$gene_locus,
+        labels=gen_labels) +
+    coord_flip()  +
+    theme(axis.title.y = element_blank(),
+          axis.text.y = element_text(face="bold"),
+          legend.position = "none")
+    #theme(axis.text.x = element_text(angle = -60, hjust = 0))
+}
+
+l2fc_plots(res, gene_set1, gene_set1)
+ggsave(here("images/lfc_Rv0072.png"))
+l2fc_plots(res, gene_set2, gene_set2)
+ggsave(here("images/lfc_phoPR.png"))
+l2fc_plots(res, gene_set3)
+ggsave(here("images/lfc_Rv0142.png"))
+l2fc_plots(res, gene_set4)
+ggsave(here("images/lfc_nuoMN.png"))
+
+all_genes <- c(gene_set1, gene_set2, gene_set3, gene_set4)
+#all_genes <- factor(all_genes, levels=geneLabs)
+
+geneLabs <- c("Rv0072", "Rv0073","UTR:Rv0073-74", "Rv0074", "Rv0075",  "UTR:3'Rv0075", "Rv0076c","Rv0757", "antisense_phoR", "Rv0758", "UTR:3'Rv0759c", "Rv0759c", "Rv0142", "UTR:3'Rv0143c","Rv0143c", "Rv3157", "Rv3158", "antisense_nuoN","UTR:3'Rv3159",  "Rv3159c")
+
+df <- res %>% filter(gene_locus %in% all_genes) %>% 
+    mutate(sig=ifelse(padj<0.54,"Y", "N"), dir=log2FoldChange > 0)
+df$gene_locus <- factor(df$gene_locus, levels=all_genes)
+df$geneLab <- factor(geneLabs, levels=geneLabs)
+ggplot(df, aes(x=gene_locus, y=log2FoldChange, fill=dir)) +
+    geom_bar(stat="identity", show.legend = F) +
+    scale_fill_brewer(palette="Set2") +
+    geom_text(aes(label = c(ifelse(sig=="Y", "**", "")),
+                  size=14, family="serif", fontface="bold"),
+              hjust = 0) +
+    scale_x_discrete(breaks=df$gene_locus,
+        labels=geneLabs) +
+    coord_flip()  +
+    theme(axis.title.y = element_blank(),
+          axis.text.y = element_text(face="bold"),
+          legend.position = "none")
+
+
+l2fc_plots(res, all_genes, geneLabs)
+ggsave(here("images/lf2fc_all_genes.png"))
+  #mutate(gene_locus=str_replace(gene_locus, "putative_UTR:p85169_85533", "3'UTR:Rv0075")) %>%
+  #mutate(gene_locus = str_replace(gene_locus, "putative_UTR:p82669_82747", "BTwUTR:Rv0073_74"))
+
+#heatmap of hits
+all_genes <- c(gene_set1, gene_set2, gene_set3, gene_set4)
+all_genes <- all_genes
+geneLabs <- c("Rv0072", "Rv0073","UTR:Rv0073-74", "Rv0074", "Rv0075",  "UTR:3'Rv0075", "Rv0076c","Rv0757", "antisense_phoR", "Rv0758", "UTR:3'Rv0759c", "Rv0759c", "Rv0142", "UTR:3'Rv0143c","Rv0143c", "Rv3157", "Rv3158", "antisense_nuoN","UTR:3'Rv3159",  "Rv3159c")
+
+res_hits <- rev(res %>% filter(gene_locus %in% all_genes))
+res_hits$gene_locus <- factor(res_hits$gene_locus, levels=rev(all_genes))
+ggplot(res_hits ) +
+  geom_tile(aes(x=1, y=gene_locus, fill=log2FoldChange)) + 
+  #geom_tile() +
+  #geom_text(aes(x = dataset, y = gene_locus, label = log2FoldChange), size=2, fontface="bold") +
+  scale_fill_continuous_sequential(palette = "YlOrRd", name="log2FoldChange", trans="reverse") +
+  #theme(axis.text.y = element_text(size=6, face="bold", colour = sig_cols),
+  theme(axis.text.y = element_text(size=12, face="bold"),
+        #axis.text.y = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank()) +
+  scale_x_continuous(labels = rep("", 5), breaks = 1:5) +
+  scale_y_discrete(labels= rev(geneLabs))
+  #this only rearranges labels and y axis, not the tiles
+  #scale_y_discrete(labels= geneLabs, limits = rev(levels(all_genes)))
+
+
+ggsave(here("lfc_heatmap_hits.png"), width=3)
+
+```
+
+
+![Rv0071_group](images/Rv0071_group.png)
+
+![phoPR operon](images/phoPR.png)
+
+![Rv0140_group](images/Rv0140_group.png)
+
+
+![nuoMN_group](images/nuoMN_group.png)
+
+
+
+Lower phoR expression, increased expression of 3'UTR for Rv3159 (PPE53)
+
+
+make simpler gff for igv etc
+
+```{r simple_gff}
+library(rtracklayer)
+library(plyranges)
+
+gff <- import("~/myco_projects/bh_gffs/comb_filtered_ov_30_11.gff3")
+rem_types <- c("mRNA", "exon", "CDS", "transcript")
+gff_brief <- gff %>% filter(!type %in% rem_types)
+write_gff3(gff_brief, file=here("annotations/brief_bh_mtb.gff3"))
+
+```
+
+Make a ratio bedfile of the ratio of sense/antisense coverage per bp over the phoR transcript length for induced/non-induced.
+
+Made bedfiles of ratio of sense to antisense along phoR gene body for induced and non-induced.
+
+```{r sense_antisense_ratio}
+library(dplyr)
+library(ggplot2)
+
+#read in bedfiles
+induced_bed <- read_tsv(here("coverage/phor_ratio_samp2_induced.bed"), col_names = F)
+non_bed <- read_tsv(here("coverage/phor_ratio_samp2_non.bed"), col_names = F)
+
+colnames(induced_bed) <- c("chrom", "start", "end", "ratio")
+colnames(non_bed) <- c("chrom", "start", "end", "ratio")
+
+induced_bed <- induced_bed %>% select(start, ratio) %>% mutate(treat = "induced")
+non_bed <- non_bed %>% select(start, ratio) %>% mutate(treat = "non") 
+df <- rbind(induced_bed, non_bed) %>% group_by(start)
+summary(df$ratio)
+
+ggplot(df) +
+  geom_point(aes(x=start, y=log10(ratio), colour=treat)) +
+  ylab("log10 ratio") +
+  xlab("genomic coord") +
+  ggtitle("Ratio of sense:antisense coverage") +
+  geom_vline(xintercept=852682) +
+  annotate("text", x=852700, y=-1, label="852682")
+
+#df <- left_join(induced_bed, non_bed, by="start", suffix = c(".induced", ".non"))
+# ggplot(df) +
+#   geom_point(aes(x=start, y=ratio.induced), colour="blue") +
+#   geom_point(aes(x=start, y=ratio.non), colour="green") +
+#   ylab("ratio of sense:antisense covg") +
+#   xlab("genomic coord") +
+#   geom_vline(xintercept=852682)
+
+```
+
+In induced: more sense being expressed in overlapping region (antisense being suppressed). in non-overlapping part, more antisense.
+
+In non-induced: more antisense expressed than sense in overlapping region, in non-overlap more sense being expressed.
+
+Maybe better to compare sense for induced vs non
+
+```{r ratio_induced_forward}
+library(dplyr)
+library(ggplot2)
+library(grid)
+
+induced_fwd <- read_tsv(here("coverage/phor_ratio_samp2_induced_fwd.bed"), col_names = F)
+colnames(induced_fwd) <- c("chrom", "start", "end", "ratio")
+induced_fwd <- induced_fwd %>% select(start, ratio) %>% mutate(strand = "fwd")
+ggplot(induced_fwd) +
+  geom_point(aes(x=start, y=ratio), colour="blue") +
+  ylab("Ratio read coverage") +
+  xlab("genomic coordinate") +
+  ggtitle("Ratio induced:non-induced expression of phoR") +
+  annotate("rect", xmin=852656, xmax=852678, ymin=-Inf, ymax=Inf, alpha=0.5, fill="lightblue") +
+  annotate("text", x=852669, y=0, label="sgRNA") +
+  geom_vline(xintercept = 852682, linetype="dotted")+
+  annotate("text", x=852790, y=0.75, label = "asphor_tss") +
+  geom_vline(xintercept = 852612, color="green",linetype="dashed") +
+  annotate("text", x=852500, y=0.15, label= "phoR_tss") 
+  #theme(axis.title.x = element_blank()) +
+  #coord_cartesian(clip = 'off') +
+  #theme_minimal(base_size = 16) +
+  #theme(axis.title = element_text(hjust = 0)) +
+        #plot.caption = element_text(hjust = 0),
+        #panel.grid = element_blank()) +
+  #annotation_custom(segmentsGrob(x0=852352, x1=853850, y0=-0.1, y1=0.1, gp = gpar(lwd = 2),
+   #                             arrow = arrow(length = unit(2.5, 'cm')) ) )+
+  #labs(caption = "gene coordinates")
+  
+#ggsave(here("images/induced_non_ratio.png"))  
+
+```
+
+make covg files for all three samples and compare mean covg at each bp? or calculate ratio for each and take mean of difference?
+
+Can use bedtools coverage with multiple files but this is feature specific.
+
+[bedtools coverage](https://bedtools.readthedocs.io/en/latest/content/tools/coverage.html)
+
+coverageBed -s -a <FILE> \
+                       -b <FILE1, FILE2, ..., FILEN>
+                       
+a is the gff, b are the bam files (or bed files--from bigwig?)   
+
+The bamcov files are normalised with RPKM but since used -extendReads to count fragments, it is similar to FPKM = (#fragments of gene/total num mapped reads)/bin length
+
+Make shorter gff with just the features of interest
+
+```{r phoPR gff}
+library(rtracklayer)
+library(GenomicRanges)
+library(plyranges)
+#library(baerhunter)
+library(stringr)
+
+#for phoPR
+gene_set2 <- c("gene:Rv0757",  "putative_sRNA:m852286_852683","gene:Rv0758", "putative_UTR:m853690_853824", "gene:Rv0759c")
+gff <- import("~/myco_projects/bh_gffs/comb_filtered_ov_30_11.gff3")
+sh_gff <- gff %>% plyranges::filter(ID %in% gene_set2)
+write_gff3(sh_gff, here("annotations/phoPR_only.gff3"))
+
+```
+
+
+### Use normalised/transformed counts to calculate ratio of sense to antisense expression
+
+```{r compare_counts}
+
+library(DESeq2)
+library(limma)
+library(ggplot2)
+
+#counts <- readRDS(here("R_data/complete_counts.RData"))
+counts <- as.matrix(read.delim(here("counts/bh_all_020524_Counts.csv")), sep="\t")
+colnames(counts) <- seq(1,12)
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <- DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+
+#data transformation                              
+vsd <- vst(dds, blind=TRUE)
+#assay retrieves matrix of normalised values
+head(assay(vsd), 3)
+assay(vsd) <- limma::removeBatchEffect(assay(vsd), vsd$experiment)
+vsd.df <- as_tibble(assay(vsd), rownames="feature", names_prefix="sample_") 
+vsd.df <- pivot_longer(vsd.df, cols=c(2:13), names_to="sample", values_to="count")
+metadata <- tibble(plasmid=vsd$plasmid, treatment=vsd$treatment, experiment=vsd$experiment, sample=as.character(vsd$sample))
+vsd.df <- left_join(vsd.df, metadata, by = join_by(sample))
+
+phoR_ex <- vsd.df %>% filter(feature=="gene:Rv0758") %>% select(-c(feature)) %>% dplyr::rename("phoR_count"= "count")
+anti_ex <- vsd.df %>% filter(feature=="putative_sRNA:m852286_852683") %>% select(-c(feature)) %>% dplyr::rename("antisense_count" = "count")
+#cbind(phoR_ex, anti_ex$antisense_count) 
+
+df <- full_join(phoR_ex, anti_ex, by = c("sample", "plasmid", "treatment", "experiment"))           
+
+df <- df %>% group_by(plasmid, treatment) %>% summarise(mean_phoR = mean(phoR_count), mean_antisense=mean(antisense_count)) %>% mutate(senseVantisense = mean_antisense/mean_phoR)
+
+df
+```
+
+
+
+Normalised counts assigned to phoR and antisense are at a similar ratio regardless of experiment (1.11-1.13). same with or without batch correction. This is wrong--corrected with re-counting for strandedness!
+
+## phoR expression
+
+Is dcas9 interfering with txn initiation at internal phoR TSS versus elongation? or is lack of antisense compromising the stability of the phoR transcript?
+
+Looking at the original rt-pcr we did with 10mL cultures, we did test phoR expression in strain expressing sgRNA6 which was targetted to the antisense strand downstream from antisense TSS. 
+
+In this notebook: /myco_projects/Sharon_lab/qRT-PCR.Rmd there are results from 2/11/23. 
+
+Also in lab book pps.135-142
+
+We saw increase of expression of phoR in the ATc+ strain. We tested with pcr primers to 5' part of transcript that was overlapping the antisense and not to the section downstream from the sgrna target sequence. So don't really know if it affected elongation of phoR
+
+Only two replicates so maybe there was no real change in phoR, also lower expression downstream and didn't get great yield with 10mL cultures.
+
+In Choudhary etal they use an empty vector control. In Singh et al, they use a plasmid vector with a non-binding sgRNA (non-homologous to any Mtb sequence) but has a dcas9 handle so will still bind the dcas9.
+
+Original Qi et al, 2013 paper has a lot of work evaluating different locations of sgrnas and efficiencies. Very low efficiency far from TSS so debatable whether control sgRNAs far downstream would be effective anyway. The collision model proposed may explain why sgrnas targetting template strand dont work--rnap coming at basepaired complex may dislodge the sgrna with helicase complex before it comes into contact with dcas9 molecule.
+
+![collision model Qi et al 2013](images/crispri_collision.png)
+
+Cite Valwynne's paper as they compare different sgrna strains and their susceptibility to rifampicin compared to dcas9 control. sgrna6 is targetting non-coding strand downstream from TSS (thus potentially interfering with elongation) and has no effect on rifampicin suscept. vs control. Shows that targetting must be coding strand for elongation to be blocked 
+
+
+Create spreadsheets with names and functional categories, etc.
+
+```{r detail_spreadsheet}
+library(dplyr)
+library(rtracklayer)
+library(plyranges)
+library(readxl)
+#read in gff from mycobrowser with functional categories
+gff <- import("~/myco_projects/ref_seqs/Mtb/Mycobacterium_tuberculosis_H37Rv_gff_v4.gff")
+gff.cds <- gff %>% filter(type == "CDS") %>% select(Locus, Name, Product, Functional_Category)
+gff.df <- as_tibble(gff.cds) %>% select(Locus, start, end, strand, Name, Product, Functional_Category)
+gff.df <- gff.df %>% arrange(start) %>%
+  unnest(Functional_Category) %>%
+  group_by(Locus) %>%
+  summarise(Functional_Category = toString(Functional_Category)) %>%
+  select(Locus, Functional_Category)
+
+#read in original gff used for generating results for ncRNA names
+gff2 <- import("~/myco_projects/bh_gffs/comb_filtered_ov_30_11.gff3")
+my_types <- c("gene", "ncRNA_gene", "putative_UTR", "putative_sRNA")
+gff2.ncrna <- gff2 %>% filter(type %in% my_types) %>% select(ID, Name)
+gff2.df <- as_tibble(gff2.ncrna) %>% select(ID, start, end, strand, Name) 
+
+#read in results
+res <- read_csv(here("output/interaction_allData_batch.csv"))
+#join to original gff
+ss.df <- left_join(res, gff2.df, by=c("gene_locus" = "ID"))
+# gene locus without 'gene'
+ss.df <- ss.df %>% mutate(gene_locus = sub("gene:", "", gene_locus))
+#join to functional category 
+ss.df <- left_join(ss.df, gff.df, by=join_by("gene_locus" == "Locus")) 
+#eliminate na's
+ss_na.df <- ss.df %>% mutate(Name = replace_na(Name, ""), Functional_Category = replace_na(Functional_Category, ""))
+#subst commas in functional category for "_" so it doesn't confuse excel
+ss_na.df <- ss_na.df %>% mutate(Functional_Category = gsub(",\\s+", "_", Functional_Category))
+
+write_csv(ss_na.df, here("output/interaction_allData_batch_FC.csv"), col_names =T, quote="none")
+
+#filter for hits padj < 0.05
+hits_fc <- ss_na.df %>% filter(padj < 0.05)
+write_csv(hits_fc, here("output/interaction_hits_batch_FC.csv"), col_names =T, quote="none")
+
+table <- hits_fc %>% mutate(fold_change = round(2^log2FoldChange,2)) %>% select(gene_locus, fold_change, padj, Name, Functional_Category)
+write_csv(table, here("output/slide_table_hits.csv"), col_names = T, quote="none")
+
+
+#phoP hits
+phoP_markers <- c("pks2", "pks3", "fadD21", "lipF", "narK1", "mcr7")
+
+ss.df %>% filter(Name %in% phoP_markers)
+
+```
+
+
+No large log fold (> |0.5|) change of any note for phoP marker genes.
+
+
+## batch correction exploration
+
+Use ComBat-Seq to eliminate batch effects and see if this is more effective than limma? Only works with KNOWN batch effects. using batch in deseq2 model removes for modelling so is this only for visualisation? can poss use other methods for diff expression?
+
+>ComBat-Seq is an improved model based on the ComBat framework, which
+specifically targets RNA-Seq count data. It uses a negative binomial regression
+to model the count matrix, and estimate parameters representing the batch
+effects. Then it provides adjusted data by mapping the original data to an
+expected distribution if there were no batch effects. The adjusted data preserve
+the integer nature of count matrix. Like ComBat, it requires known a batch
+variable.
+
+>In ComBat-Seq, user may specify biological covariates, whose signals will be
+preserved in the adjusted data. If users wish to specify multiple biological variables, 
+they may pass them as a
+matrix or data frame to the covar_mod parameter
+
+
+```{r combat-seq}
+library(DESeq2)
+library(sva)
+
+#count_matrix <- readRDS(here("R_data/complete_counts.RData"))
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+batch <- cond.df$experiment
+trt <- rep(c(1,0), 6)
+plasmid <- rep(c(1,1,0,0), 3)
+covar_mat <- cbind(trt, plasmid)
+adjusted_counts <- ComBat_seq(count_matrix, batch=batch, group=NULL, covar_mod=covar_mat)
+head(adjusted_counts)
+mode(adjusted_counts) <- "integer"
+
+dds <- DESeqDataSetFromMatrix(adjusted_counts, cond.df, ~1)
+vsd <- vst(dds, blind=T)
+
+#pca
+pcaData <- plotPCA(vsd, intgroup=c("treatment", "plasmid", "experiment"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=plasmid, shape=treatment, label=experiment )) +
+  geom_point(size=3) +
+  geom_text(vjust=-1) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+
+
+
+#more plots
+#heatmap of sample-to-sample distances
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$treatment, vsd$plasmid, sep="-")
+colnames(sampleDistMatrix) <- vsd$experiment
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
+
+# make all numeric or factors to try to label biplots
+cond_new <- cond.df
+cond_new$sample <- as.numeric(as.character(cond.df$sample))
+cond_new$treatment <- factor(as.character(cond.df$treatment, levels= c("induced", "non")))
+cond_new$plasmid <- factor(as.character(cond.df$plasmid), levels=c("sgrna", "empty"))
+cond_new$plasmid <- factor(as.character(cond.df$plasmid))
+
+#make with all numeric factors (can't use factors fo eigenplot)
+cond_eigen <- cond.df
+cond_eigen$sample <- as.numeric(as.character(cond.df$sample))
+cond_eigen$experiment <- as.numeric(cond.df$experiment)
+cond_eigen$treatment <- as.numeric(cond.df$treatment)
+cond_eigen$plasmid <- as.numeric(cond.df$plasmid)
+
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond_new)
+#p <- pca(assay(vsd), metadata=cond_new)
+summary(p)
+
+#Plot the proportion of variance of each component
+screeplot(p, axisLabSize = 18, titleLabSize = 22)
+
+#biplots
+biplot(p)
+biplot(p, showLoadings = TRUE,
+    labSize = 2, pointSize = 3, sizeLoadingsNames = 3)
+
+percentVar <- round( p$variance)
+#convert pca data to dataframe
+p_data <- tibble(p$rotated, experiment=p$metadata$experiment, plasmid = p$metadata$plasmid, treatment = p$metadata$treatment, name=p$metadata$sample)
+ggplot(p_data, aes(PC1, PC2, color=plasmid, shape=treatment, label=experiment )) +
+  geom_point(size=3) +
+  geom_text(vjust=-1) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+ggplot(p_data, aes(PC2, PC3, color=plasmid, shape=treatment, label=experiment )) +
+  geom_point(size=3) +
+  geom_text(vjust=-1) +
+  xlab(paste0("PC2: ",percentVar[2],"% variance")) +
+  ylab(paste0("PC3: ",percentVar[3],"% variance")) + 
+  coord_fixed()
+
+#pairsplot
+pairsplot(p)
+pairsplot(p, components = getComponents(p, c(2,3,5,6,8,12)), triangle = FALSE)
+
+#plotloadings show top hits
+plotloadings(p, labSize = 3)
+
+#eigencore plot (looks the same with non-coding)
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond_eigen)
+pl_ec <- eigencorplot(p, getComponents(p, 1:12),
+    metavars = c('experiment','plasmid','treatment'))
+pl_ec
+
+#still seeing batch effects rel to experiment in PC10-12 that didn't exist after limma
+
+#plotloadings show top hits in specific PCs
+pl <- plotloadings(p, getComponents(p, c(1:9)), labSize = 3, ylim = c(-0.1,0.1))
+# retains 20 variables incl Rv0758, Rv0073 and Rv0074
+pl
+
+
+```
+
+
+
+
+Use bedcoverage generated bedgraph files to compare total coverage (sum of samples) at each nt in phoPR region between induced and uninduced sgrna-containing.
+
+```{r compare coverage bedgraph}
+library(dplyr)
+
+induced <- read_tsv(here("coverage/induced_sgrna_out.bedgraph"), col_names = F)
+colnames(induced) <- c("genome", "source", "type", "start", "end", "na", "strand", "na2", "gene", "bp_num", "coverage")
+induced$gene <- sub(";.*", "", induced$gene)
+induced$gene <- sub("ID=gene:", "", induced$gene)
+induced$gene <- sub("ID=", "", induced$gene)
+
+non <- read_tsv(here("coverage/non_sgrna_out.bedgraph"), col_names = F)
+colnames(non) <- c("genome", "source", "type", "start", "end", "na", "strand", "na2", "gene", "bp_num", "coverage")
+non$gene <- sub(";.*", "", non$gene)
+non$gene <- sub("ID=gene:", "", non$gene)
+non$gene <- sub("ID=", "", non$gene)
+non <- non %>% select(gene, bp_num, coverage)
+
+df <- left_join(induced, non, by=join_by(gene, bp_num), suffix = c(".induced", ".non"))
+df <- df %>% mutate(ratio = coverage.induced / coverage.non)
+df <- df %>% mutate(bp_num = start + bp_num -1)
+
+df %>% group_by(gene) %>% summarise(mean = mean(ratio))
+
+
+
+ggplot(df %>% filter(gene=="Rv0758")) +
+  geom_point(aes(x = bp_num, y=ratio), size = 0.5) +
+  annotate("rect", xmin=852656, xmax=852678, ymin=-Inf, ymax=Inf, alpha=0.5, fill="lightblue") +
+  annotate("text", x=852669, y=0, label="sgRNA") +
+  geom_vline(xintercept = 852682, linetype="dotted")+
+  annotate("text", x=852790, y=0.75, label = "asphor_tss") +
+  geom_vline(xintercept = 852612, color="green",linetype="dashed") +
+  annotate("text", x=852500, y=0.15, label= "phoR_tss") 
+
+pl_df <- df %>% filter(gene %in% c("Rv0757", "Rv0758", "putative_sRNA:m852286_852683")) %>%
+  select(gene, bp_num, ratio) %>%
+  mutate(ratio = log10(ratio)) %>%
+  pivot_wider( id_cols = bp_num, names_from = c(gene), values_from = c(ratio) ) %>%
+  dplyr::rename(antisense_phoR = `putative_sRNA:m852286_852683`)
+head(pl_df)
+
+#phoP
+ggplot(df %>% filter(gene=="Rv0757")) +
+  geom_point(aes(x = bp_num, y=ratio), size = 0.5)
+
+ggplot(pl_df) +
+  geom_point(aes(x = bp_num, y = antisense_phoR, color="antisense"), size=0.5) +
+  geom_point(aes(x = bp_num, y = Rv0757, color="phoP"), size=0.5) +
+  geom_point(aes(x = bp_num, y = Rv0758, color="phoR"), size=0.5) +
+  ylab("log10 ratio coverage: induced v non") +
+  xlab("genome coord") +
+  theme(legend.title = element_blank()) +
+  ggtitle("sense and antisense coverage ratios") +
+  annotate("rect", xmin=852656, xmax=852678, ymin=-Inf, ymax=Inf, alpha=0.5, fill="lightblue") +
+  #annotate("text", x=852669, y=0, label="sgRNA") +
+  geom_vline(xintercept = 852682, linetype="dotted") +
+  #annotate("text", x=852890, y=0.75), label = "asphor TSS") +
+  #show phoR iTSS
+  #geom_vline(xintercept = 852612, color="black",linetype="dashed") +
+  #annotate("text", x=852460, y=0.30, label= "phoR iTSS") +
+  #show cleavage site (relaxed) at end of phoP
+  geom_vline(xintercept = 852354, color="black", linetype="dashed") +
+  #annotate("text", x=852250, y=0.3), label="cleavage site", size=3) +
+  #high confidence further down phoR
+  #geom_vline(xintercept = 853361, color="black", linetype="dashed") +
+  #annotate("text", x=853300, y=0.3, label="cleavage") +
+  xlim(c(852000,853500)) +
+  ylim(c(-1.0, 1.0)) +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 10),
+        axis.title = element_text(size=14)) +
+  guides(color = guide_legend(override.aes = list(size=2)))
+
+
+ggsave(here("images/coverage_ratio_phoPR_anti.png"), width = 8, height=6)
+#ggsave(here("images/coverage_ratio_both.png"))
+```
+
+It appears that interference follows the same pattern for antisense and sense transcripts.
+
+Re-do pca without dcas9 genes included. again without ncRNA
+
+```{r no_dcas9}
+library(dplyr)
+library(limma)
+library(PCAtools)
+library(DESeq2)
+
+#counts <- readRDS(here("R_data/complete_counts.RData"))
+#use without dcas9
+new_counts <- counts[4:nrow(counts),]
+#with pc only and no dcas9
+new_counts <- new_counts[grepl("gene:", rownames(new_counts)),]
+
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <- DESeqDataSetFromMatrix(countData = round(new_counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+design(dds) <- formula(~ 1 + treatment + plasmid + treatment:plasmid)
+dds <- DESeq(dds) 
+
+#add these surrogate vectors as columns in dataset and change design
+ddssva <- dds
+ddssva$SV1 <- svseq$sv[,1]
+design(ddssva) <- ~ SV1 + treatment + plasmid + treatment:plasmid
+
+#remove batch effect for visualisation with limma
+vsd <- vst(ddssva)
+plotPCA(vsd, "experiment")
+assay(vsd) <- limma::removeBatchEffect(assay(vsd), vsd$experiment)
+plotPCA(vsd, "experiment")
+pcaData <- plotPCA(vsd, intgroup=c("treatment", "plasmid", "experiment"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=experiment, shape=treatment, label=plasmid )) +
+  geom_point(size=3) +
+  geom_text(vjust=-1) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+
+#more pca plots
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond.df)
+summary(p)
+
+screeplot(p, axisLabSize = 18, titleLabSize = 22)
+
+#biplots
+biplot(p)
+biplot(p, showLoadings = TRUE,
+    labSize = 2, pointSize = 3, sizeLoadingsNames = 3)
+
+#labelled biplots
+source(here("scripts/ggbiplot_pcatools.R"))
+ggbiplot(p, c("PC1", "PC2"), "experiment", "treatment", "plasmid", "left")
+#other pcs
+ggbiplot(p, c("PC2", "PC3"), "experiment", "treatment", "plasmid")
+ggbiplot(p, c("PC3", "PC4"), "experiment", "treatment", "plasmid", "none")
+
+#3D PCA plot
+
+plotobj <- NULL
+plotobj$PC1 <- p$rotated[,"PC2"]
+plotobj$PC2 <- p$rotated[,"PC2"]
+plotobj$PC3 <- p$rotated[,"PC3"]
+plotobj$lab <- as.character(p$metadata$experiment)
+plotobj <- as.data.frame(plotobj)
+plotobj$col <- p$metadata$treatment
+plotobj$shape <- p$metadata$plasmid
+
+fig <- plot_ly(plotobj, x = ~PC1, y = ~PC2, z = ~PC3, 
+               color = ~col, colors = c('#BF382A', '#0C4B8E'),
+               symbol = ~shape, symbols = c("circle", "square"))
+fig <- fig %>% add_markers()
+fig <- fig %>% layout(scene = list(xaxis = list(title = 'PC1'),
+                     yaxis = list(title = 'PC2'),
+                     zaxis = list(title = 'PC3')))
+
+fig
+
+```
+Without dcas9 no difference to PCA. With Mtb protein coding only (no dcas9 and no antisense), PC1 is actually larger proportion of variance and samples still divide along treatment
+
+check if this effects the logfold changes
+
+```{r deseq_noDCAS9}
+library(dplyr)
+library(DESeq2)
+
+#these counts include plasmid, rRNA and all predicted/annotated ncRNA
+counts <- as.matrix(read.delim(here("counts/bh_all_020524_Counts.csv")), sep="\t")
+colnames(counts) <- seq(1,12)
+#use without dcas9
+#new_counts <- counts[4:nrow(counts),]
+#with pc only and no dcas9
+new_counts <- new_counts[grepl("gene:", rownames(new_counts)),]
+
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <- DESeqDataSetFromMatrix(countData = round(new_counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+design(dds) <- formula(~ 1 + experiment + treatment + plasmid + treatment:plasmid)
+dds <- DESeq(dds) 
+resultsNames(dds)
+
+#use model madds_asphor#use model matrix solution:
+mod_mat <- model.matrix(design(dds), colData(dds))
+
+# Define coefficient vectors for each condition
+induced_empty <- colMeans(mod_mat[dds$treatment == "induced" & dds$plasmid == "empty", ]) 
+induced_sgrna <- colMeans(mod_mat[dds$treatment == "induced" & dds$plasmid == "sgrna", ]) 
+non_empty <- colMeans(mod_mat[dds$treatment == "non" & dds$plasmid == "empty", ])
+non_sgrna <- colMeans(mod_mat[dds$treatment == "non" & dds$plasmid == "sgrna", ])
+
+#is the effect of treatment DIFFERENT depending on plasmid (interaction effect)
+#NULL: B5 = 0
+res <- results(dds, contrast = (induced_sgrna - induced_empty) - (non_sgrna - non_empty))
+res_05 <- results(dds, contrast = (induced_sgrna - induced_empty) - (non_sgrna - non_empty), alpha = 0.05)
+sum(res_05$padj < 0.05, na.rm = T)
+summary(res_05)
+#20, 18 up, 2 down
+
+res_df <- as.data.frame(res)
+res_df <- as_tibble(res_df, rownames = "gene_locus")
+res_interax_df <- as_tibble(res_df) %>% filter(padj < 0.05) %>% arrange(log2FoldChange)
+
+res_interax_df
+DESeq2::plotMA(res7, ylim=c(-2,2))
+
+```
+
+dcas9 doesn't affect logfold changes significantly
+
+## RNA structure analysis
+
+IntaRNA
+
+Made multi-fasta of mRNA from hits to predict structure and see if can bind to antisense
+
+Looks for RNA-RNA interactions using predicted contacts.
+
+Make multifasta with sequences of target mRNAs for use in inta rna etc
+
+```{r target_fasta}
+library(rtracklayer)
+library(GenomicRanges)
+library(plyranges)
+library(Biostrings)
+
+res <- readRDS(here("R_data/batch_dds_results.RData"))
+hits <- res %>% filter(padj < 0.05 & grepl("gene:", gene_locus))
+myco_gff <- import.gff("~/myco_projects/ref_seqs/Mtb/Mtb_h37rv.ASM19595v2_AL123456.3.gff3")
+#my_targets <- hits %>% select(gene_locus) %>% pull()
+my_targets <- sub("gene:", "", hits %>% select(gene_locus) %>% pull())
+
+# get sequences from h37Rv
+tb_fasta <- readDNAStringSet(here("annotations/cds_AL123456.fna"), format="fasta",
+               nrec=-1L, skip=0L, seek.first.rec=FALSE, use.names=TRUE)
+locus <- "(?<=locus_tag=).*?(?=\\])"
+target_fastas <- tb_fasta[str_match(names(tb_fasta), locus)[,1] %in% my_targets]
+names(target_fastas) <- my_targets
+
+## Write an XStringSet object to a FASTA (or FASTQ) file:
+#writeXStringSet(x, filepath, append=FALSE,
+#                compress=FALSE, compression_level=NA, format="fasta", ...)
+writeXStringSet(target_fastas, here("annotations/target_seqs.fa"), format="fasta")
+
+```
+
+Divided into 2 sets as there are 11 protein coding hits. Removed phoR from analysis.
+
+Used default parameters with minimum seed to 7,
+
+Several hits with negative min free energy. Esp nuoM/N but will it really be working as sRNA binding in middle of mRNA? area 50-60 in asPhor could be seed region
+
+All saved to intaRNA folder.
+
+How does the sRNA actually fold though? does it have an exposed seed region?
+
+
+Use rnafold. Can view structure in 'forna' which numbers bases and you can move it around.
+
+http://rna.tbi.univie.ac.at/forna/forna.html?id=RNAfold/7Wa5a1BqOo&file=mfe_probs.json
+
+doesn't really form stem loop with nice seed region, it would need to unfold to bind these targets. in rnafold
+
+could set folding constraints to maintain this region unpaired. Still looks unlikely.
+
+TargetRNA3 for mRNA target search 
+
+[targetrna3](https://cs.wellesley.edu/~btjaden/cgi-bin/TargetRNA3)
+used sequence for asPHor
+GAGTGCCGTATAGCTCTGGCCGTCGGGGCTGATCACCCGAACGTAGAACCTCGACGGCGGCCGATCGGGGTTATGACCAGGGTAGGGGTCCGGCGCCAAGGGCAGCGTGATCTGCGCCCAGATTTGGGCTTCCTCGAGCAACACCCGATCGATCCGGCTGGTCAGCCGGTGCTGCAACATCGAGGTGACCGCGATCCCCGAGGCCACAAGTCCAGTGGCCACCAGGATCAGCGTGGCTGCGACCAGGCGTACCCGTAGGGGCAGCCTTCCTCGAAGGTGTCTGGCCATTGCCGCGTTCTCCTCGGGCTGCCGATCCGATTAACTACCAAGACTCATCGAGGCTCCCGCAGTA
+
+comes up with phoR and bcp/Rv2521 but this isn't a DEG. 
+
+
+### recounts
+
+Re-do all feature counts with protein coding genes + antisense_phoR only to see if get similar hits? No dcas9 either
+
+First time done with bh count_features but this will only assign fraction of read to overlapping features? is this an issue with overlapping genes. (will allow multimapping/fraction and overlapping reads will count for each feature)
+
+When recounting with BH, with protein coding only, have 41M-111M unassigned reads (only 41% assigned) compared to .072-.111 M reads unassigned (around 75% assigned?). all down to unannotated regions or rRNA? (rRNA/tRNA excluded as default)
+
+REcount with rsubread featureCounts vs bh count_features and use settings so overlapping reads will be assigned to feature with largest overlap ('largestOverlap = T' and 'allowMultiOverlap = T' (default setting=F))
+
+
+```{r pca_pc_only}
+library(dplyr)
+library(limma)
+library(PCAtools)
+library(DESeq2)
+library(sva)
+
+mtb_counts <- as.matrix(read.delim(here("counts/no_ncRNA_290424_Counts.csv")), sep="\t")
+colSums(mtb_counts)  
+#mtb_counts <- as.matrix(read.delim(here("counts/no_ncRNA_010524_Counts.csv")), sep="\t")
+colnames(mtb_counts) <- seq(1,12)
+
+#setdiff(rownames(mtb_counts1), rownames(mtb_counts))
+
+dim(mtb_counts)
+
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <- DESeqDataSetFromMatrix(countData = round(mtb_counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+design(dds) <- formula(~ 1 + treatment + plasmid + treatment:plasmid)
+dds <- DESeq(dds) 
+
+vsd <- vst(dds)
+
+#initial pca
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond.df)
+summary(p)
+screeplot(p, axisLabSize = 18, titleLabSize = 22)
+#biplots
+biplot(p)
+biplot(p, showLoadings = TRUE,
+    labSize = 2, pointSize = 3, sizeLoadingsNames = 3)
+#still clustering by experiment
+pcaData <- plotPCA(vsd, intgroup=c("treatment", "plasmid", "experiment"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=experiment, shape=treatment, label=plasmid )) +
+  geom_point(size=3) +
+  geom_text_repel(size =4) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+ggsave(here("images/original_pca.png"), dpi=500)
+
+
+#look for surrogate vectors
+#we know of two variables but are interested in any surrogate variables
+dat  <- counts(dds, normalized = TRUE)
+idx  <- rowMeans(dat) > 1
+dat  <- dat[idx, ]
+mod  <- model.matrix(~ treatment + plasmid + treatment:plasmid, colData(dds))
+mod0 <- model.matrix(~ 1, colData(dds))
+
+#estimate number of surrogate variables
+svseq <- svaseq(dat, mod, mod0, n.sv=NULL)
+# estimates 2 surrogate variables
+#estimate two surrogate variables
+svseq_2 <- svaseq(dat, mod, mod0, n.sv = 2)
+
+#add 2 surrogate vectors as columns in dataset and change design
+ddssva_2 <- dds
+ddssva_2$SV1 <- svseq_2$sv[,1]
+ddssva_2$SV2 <- svseq_2$sv[,2]
+design(ddssva_2) <- ~ SV1 + SV2 + treatment + plasmid + treatment:plasmid
+
+#remove batch effect for visualisation with limma
+vsd <- vst(ddssva_2)
+plotPCA(vsd, "experiment")
+assay(vsd) <- limma::removeBatchEffect(assay(vsd), vsd$experiment)
+plotPCA(vsd, "experiment")
+
+pcaData <- plotPCA(vsd, intgroup=c("treatment", "plasmid", "experiment"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=experiment, shape=treatment, label=plasmid )) +
+  geom_point(size=3) +
+  geom_text_repel(size =4) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+ggsave(here("images/batch_removed_pca.png"), dpi=400)
+#this plot shows good clustering esp for induced samples
+#without all the labels
+ggplot(pcaData, aes(PC1, PC2, color=experiment)) +
+  geom_point(size=3) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+
+
+#more pca plots
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond.df)
+summary(p)
+screeplot(p, axisLabSize = 18, titleLabSize = 22)
+#biplots
+biplot(p)
+biplot(p, showLoadings = TRUE,
+    labSize = 2, pointSize = 3, sizeLoadingsNames = 3)
+
+
+#with one surrogate vector
+#estimate one variable
+svseq_1 <- svaseq(dat, mod, mod0, n.sv = 1)
+ddssva_1 <- dds
+ddssva_1$SV1 <- svseq_1$sv[,1]
+design(ddssva_1) <- ~ SV1 + treatment + plasmid + treatment:plasmid
+
+#remove batch effect for visualisation with limma
+vsd <- vst(ddssva_1)
+plotPCA(vsd, "experiment")
+assay(vsd) <- limma::removeBatchEffect(assay(vsd), vsd$experiment)
+plotPCA(vsd, "experiment")
+pcaData <- plotPCA(vsd, intgroup=c("treatment", "plasmid", "experiment"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=experiment, shape=treatment, label=plasmid )) +
+  geom_point(size=3) +
+  geom_text(vjust=-1) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+
+#again this pca plot shows good clusters by induced+sgrna
+
+#more pca plots
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond.df)
+summary(p)
+screeplot(p, axisLabSize = 18, titleLabSize = 22)
+#biplots
+biplot(p)
+biplot(p, showLoadings = TRUE,
+    labSize = 2, pointSize = 3, sizeLoadingsNames = 3)
+
+#labelled biplots
+source(here("scripts/ggbiplot_pcatools.R"))
+ggbiplot(p, c("PC1", "PC2"), "experiment", "treatment", "plasmid", "left")
+#other pcs
+ggbiplot(p, c("PC2", "PC3"), "experiment", "treatment", "plasmid")
+ggbiplot(p, c("PC3", "PC4"), "experiment", "treatment", "plasmid", "none")
+
+
+```
+
+This is examined in more detail in 'featureCounts_evalution.Rmd' started on 2 May 2024
+
+1 or 2 surrogate vectors look identical after batch correction.
+
+
+```{r matrix_3factors_batch_pconly}
+library(DESeq2)
+library(apeglm)
+library(dplyr)
+
+#mtb_counts <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")), sep="\t")
+#all_counts["putative_sRNA:m852286_852683",]
+#colSums(all_counts)
+#mtb_counts <- as.matrix(read.delim(here("counts/no_ncRNA_010524_Counts.csv")), sep="\t")
+#mtb_counts["putative_sRNA:m852286_852683",]
+#colSums(mtb_counts)
+#mtb_counts <- as.matrix(read.delim(here("counts/no_ncRNA_010524B_Counts.csv")), sep="\t")
+colnames(mtb_counts) <- seq(1,12)
+#colnames(all_counts) <- seq(1, 12)
+dim(mtb_counts)
+#dim(all_counts)
+
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <-DESeqDataSetFromMatrix(countData = round(mtb_counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+
+design(dds) <- formula(~ 1 + experiment + plasmid + treatment + treatment:plasmid)
+dds <- DESeq(dds) 
+resultsNames(dds)
+
+#with 1 interaction term
+#[1] "Intercept"                     "experiment_2_vs_1"            
+#[3] "experiment_3_vs_1"             "plasmid_sgrna_vs_empty"       
+#[5] "treatment_induced_vs_non" "plasmidsgrna.treatmentinduced"
+
+#use model madds_asphor#use model matrix solution:
+mod_mat <- model.matrix(design(dds), colData(dds))
+
+# Define coefficient vectors for each condition
+induced_empty <- colMeans(mod_mat[dds$treatment == "induced" & dds$plasmid == "empty", ]) 
+induced_sgrna <- colMeans(mod_mat[dds$treatment == "induced" & dds$plasmid == "sgrna", ]) 
+non_empty <- colMeans(mod_mat[dds$treatment == "non" & dds$plasmid == "empty", ])
+non_sgrna <- colMeans(mod_mat[dds$treatment == "non" & dds$plasmid == "sgrna", ])
+
+
+#define contrast vectors
+#B0 = intercept
+#B1 = experiment_2_vs_1
+#B2 = experiment_3_vs_1
+#B3 = plasmid: sgrna vs empty
+#B4 = treatment: induced vs non
+#B5 = treatment:induced.plasmid:sgrna (interaction term)
+
+#B1 
+res1 <- results(dds, name = "experiment_2_vs_1")
+#same as results(dds, contrast = "exp12")
+#log2 fold change (MLE): experiment 2 vs 1 
+#Wald test p-value: experiment 2 vs 1 
+res1_05 <- results(dds, name = "experiment_2_vs_1", alpha = 0.05)
+res1_05 
+sum(res1$padj < 0.05, na.rm=TRUE)
+#1517
+
+#B2 experiment 3 vs 1
+res2 <- results(dds, name = "experiment_3_vs_1")
+res2_05 <- results(dds, name = "experiment_3_vs_1", alpha = 0.05)
+summary(res2_05)
+sum(res2$padj <0.05, na.rm=T)
+#2604
+
+#B3 plasmid: sgrna or empty control
+#Null: B3=0 (no difference between the empty plasmids in main condition)
+res3 <- results(dds, contrast = non_sgrna - non_empty, alpha=0.05)
+res3 <- results(dds, contrast = list(c( "plasmid_sgrna_vs_empty")))
+summary(res3)
+sum(res3$padj < 0.05, na.rm=T)
+#6
+res3_df <- as_tibble(as.data.frame(res3), rownames="gene_locus")
+res3_df %>% filter(padj < 0.05)
+#6 genes with very low lfc but stat. signif
+
+
+#B4 empty vector treatment vs non
+#B4 = 0 (no change with treatment with empty vector)
+res4 <- results(dds, contrast = induced_empty - non_empty)
+res4_05 <- results(dds, contrast = induced_empty - non_empty, alpha = 0.05)
+summary(res4_05)
+#347
+sum(res4_05$padj < 0.05, na.rm=T)
+res4_05_df <- as_tibble(as.data.frame(res4_05), rownames="gene_locus")
+
+# testing main effect of treatment on sgrna plasmid
+#B3 + B5 = 0 (treatment has no effect on sgrna containing samples)
+res5 <- results(dds, contrast = induced_sgrna - non_sgrna)
+res5_05 <- results(dds, contrast = induced_sgrna - non_sgrna, alpha =0.05)
+summary(res5_05)
+sum(res5_05$padj < 0.05, na.rm=T)
+res5_df <- as_tibble(as.data.frame(res5_05), rownames="gene_locus")
+#294
+#equiv to 
+#res5_05 <- results(dds, contrast = list(c("treatment_induced_vs_non", "plasmidsgrna.treatmentinduced")), alpha = 0.05)
+
+##main condition effect on two different genotypes (difference between induced sgrna and induced empty)
+#null B4 + B5 = 0
+res6 <- results(dds, contrast = induced_sgrna - induced_empty)
+res6_05 <- results(dds, contrast = induced_sgrna - induced_empty, alpha=0.05)
+sum(res6_05$padj < 0.05, na.rm=TRUE)
+summary(res6_05)
+res6_df <- as_tibble(as.data.frame(res6_05), rownames="gene_locus")
+#20
+#equivalent to
+#res6_05 <- results(dds, contrast = list(c("plasmid_sgrna_vs_empty", "plasmidsgrna.treatmentinduced")))
+
+#is the effect of treatment DIFFERENT depending on plasmid (interaction effect)
+#NULL: B5 = 0
+res7 <- results(dds, contrast = (induced_sgrna - induced_empty) - (non_sgrna - non_empty))
+res7_05 <- results(dds, contrast = (induced_sgrna - induced_empty) - (non_sgrna - non_empty), alpha = 0.05)
+sum(res7_05$padj < 0.05, na.rm = T)
+summary(res7_05)
+#12, 9 up, 3 down
+
+res7_df <- as.data.frame(res7)
+res7_df <- as_tibble(res7_df, rownames = "gene_locus")
+res_interax_df <- as_tibble(res7_df) %>% filter(padj < 0.05) %>% arrange(log2FoldChange)
+res_interax_df
+DESeq2::plotMA(res7, ylim=c(-2,2))
+```
+MOstly same gene hits (Rv0072-0075 and Rv3157-3158, Rv0142-Rv0143c, Rv1230c, Rv0634c) but no Rv0991c (adjpvalue = 0.76!) or Rv0076c. an additional downregulated hit, Rv0314c (lfc very low -0.5).
+
+Log fold change of antisense RNA is huge now (-4.24) but phoR not changed as much (-1.11). Upregulated genes have lower fold changes.
+
+Genes will be affected by fractional reads that would otherwise be divided between them and UTRs and will all be attributed to gene. Some genes will have fewer counts when including utrs.
+
+Not including annotated sRNAs and pseudogenes initially. re-ran countFeatures with 'SAF' creation so all included.(need to compare this with rRNA included bh feature_counts)
+
+for Rv0991c there is a highly expressed 3' UTR and 5' UTR. overlapping reads at utrs are not so different between conditions so maybe reduced overall difference in expression? 
+
+
+![artemis_Rv0991c](images/Rv0991c_artemis.png)
+Why is counting with bh vs featureCounts cause different log fold change for the antisense? evidently 43 features not included--all the annotated sRNAs and pseudogenes.
+
+
+
+
+How much difference is there in reads mapping to antisense regions vs sense regions in induced samples?
+
+
+```{r antisense_v_sense}
+library(dplyr)
+library(vsn)
+
+#use normalised and batch corrected counts
+
+mtb_counts <-  as.matrix(read.delim(here("counts/bh_all_020524_Counts.csv")), sep="\t")
+colnames(mtb_counts) <- seq(1,12)
+dim(mtb_counts)
+
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+dds <- DESeqDataSetFromMatrix(countData = round(mtb_counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+design(dds) <- formula(~ 1 + treatment + plasmid + treatment:plasmid)
+dds <- DESeq(dds) 
+vsd <- vst(dds)
+
+#add 2 surrogate vectors as columns in dataset and change design
+ddssva_2 <- dds
+ddssva_2$SV1 <- svseq_2$sv[,1]
+ddssva_2$SV2 <- svseq_2$sv[,2]
+design(ddssva_2) <- ~ SV1 + SV2 + treatment + plasmid + treatment:plasmid
+#remove batch effect with limma
+vsd <- vst(ddssva_2)
+assay(vsd) <- limma::removeBatchEffect(assay(vsd), vsd$experiment)
+
+vsd.df <- as_tibble(assay(vsd), rownames="feature", names_prefix="sample_") 
+vsd.df <- pivot_longer(vsd.df, cols=c(2:13), names_to="sample", values_to="count")
+metadata <- tibble(plasmid=vsd$plasmid, treatment=vsd$treatment, experiment=vsd$experiment, sample=as.character(vsd$sample))
+vsd.df <- left_join(vsd.df, metadata, by = join_by(sample))
+
+grp.df <- vsd.df %>% group_by(treatment, feature) %>% summarise(count_sum = sum(count))
+
+sense_non <-grp.df %>% filter(treatment=="non" & grepl("gene:Rv", feature))
+sum(sense_non$count_sum)
+#292833
+sense_ind <- grp.df %>% filter(treatment=="induced" & grepl("gene:Rv", feature))
+sum(sense_ind$count_sum)
+#292793
+anti_non <- grp.df %>% filter(treatment=="non" & grepl("putative", feature))
+sum(anti_non$count_sum)
+#155790
+anti_ind <- grp.df %>% filter(treatment=="induced" & grepl("putative", feature))
+sum(anti_ind$count_sum)
+#156008
+
+non_ratio <- sum(sense_non$count_sum) / sum(anti_non$count_sum)
+#1.9
+
+ind_ratio <- sum(sense_ind$count_sum) / sum(anti_ind$count_sum)
+#1.9
+
+```
+Not a huge difference in total reads mapping to antisense transcripts with ATc induction.
+
+
+MIstake made in counting script with bh on 290424 and 010524: used 'reversely stranded' instead of 'reversely_stranded' so counts assigned to antisense features undercounted. 
+
+Correct files are 
+bh_all_020524_Counts.csv
+bh_all_020524_Count_summary.csv
+
+these have all ncRNA but no rRNA or tRNA.
+
+Calculate the log2fold change or normalised counts ratio of dcas9 in induced vs uninduced?
+
+
+
+
+
+## references for antisense regulation
+
+Lejars et al 2022 MBio, RNaseIII sensitive antisense RNAs, control RNAseIII cleavage of mRNA
+antisense binding to mRNA makes ds molecule that is sensitive to RNAseIII. 
+
+But this is in ecoli where you have a lot of full-length transcripts, maybe not as necessary to have active translation.
+
+Perhaps in mtb, where for txn elongation to continue you need active translation, 
+-short antisense txt binding of nascent txt, even not complete, prevents stalling--moves complex along? maybe forms favorable secondary structure for ribosome binding at 5' end of phoR (which isn't really overlapped by antisense)
+
+Li et al 2022, antisense causes no effect on txn but decrease in translation of sense strand. related to starvation response
+
+Dawson et al 2022
+"Herein, we describe for the first time a novel antisense RNA, termed asRelE2, that co- regulates RelE2 production via targeted processing by the Mtb RNase III, Rnc"
+
+Botella 2017, antisense expression increases opposite PE/PPE genes in rho-depletion (converging gene pairs)
+
+Morra et al 2022 arfA antisense (overlap of 3' UTRs negatively regulates)
+
+Ignatov at al 2020 overlapping utrs resist RNase degradation, (RnaseIII cleaves ss RNA)
+
+toledo arana and lasa 2020 excludon
+translation ingibited by alternative RNA structures that expose/hide RBS. Could antisense rna contribute to this?
+
+Durand, 2015 (review)
+mostly about sRNAs but includes different rnases
+RNase E cleavage of polycistronic transcripts  at AU rich single-stranded regions
+repression of translation and increased degradation
+binding of sRNA can uncover mRNa processing sites which will stabilise mRNA (or prevent access of other RNases?)
+
+zhou et al rnase E
+
+
+
+ESAT-6 secretion is decreased with SNP in Mbovis (Schreuder 2015), difference in cell wall composition and cell wall hydrophobicity
+
+
+## rna footprinting shows sORF in UTR between phoP and phoR
+
+[wadsworth jbrowse link](https://mtb.wadsworth.org/?session=share-G9M9NZFGEB&password=QNY2V)
+
+![wadsworth screenshot](images/phoPR_sORF_wadsworth.png)
+
+

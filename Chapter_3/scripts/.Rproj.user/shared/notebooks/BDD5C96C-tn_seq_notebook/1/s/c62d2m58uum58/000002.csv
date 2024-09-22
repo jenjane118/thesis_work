@@ -1,0 +1,4 @@
+"0","```bash
+#\"*.zip\" in quotes as an argument
+unzip \"*.zip\"
+```"

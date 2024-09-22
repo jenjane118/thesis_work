@@ -1,0 +1,46 @@
+"0","```r
+library(tidyverse)
+library(here)
+
+# read tsv of innoculating HMM data
+innoc_call <- read_tsv(here(\"lung_tnseq\", \"data\", \"tpp_genewiz2\", \"transit_18_08_21\", \"hmm_MbA027_loess_genes.txt\"),
+                       skip=3, col_names=T) %>%
+  select(ORF, TAs, call)
+nrow(innoc_call)
+#innoc_call<-innoc_call[order(innoc_call$ORF),]
+# couldnt get 'by' argument in join to work, so had to rename column
+innoc_call <- rename(innoc_call, Orf = ORF)
+#innoc_call <- rename(innoc_call, innoc_call = call)
+nrow(innoc_call)
+#4045 (includes tRNA)
+# select ORF and calls to join with total_data
+test <- full_join(data_8_10, innoc_call, by = \"Orf\")
+nrow(test %>% distinct(Orf))
+#4047
+# test 2985, 2971c
+test %>% 
+  select(filename, Orf, Name, number, tissue, Sites, call, insertion) %>%
+  filter(Orf==\"MB2971c\")  
+
+innoc_call %>% 
+  filter(Orf==\"MB2971c\")
+
+# some of sites don't match because taken from the mapping of HMM site/gene file and some had overlap between two genes. Retain 'TAs' column from the HMM-genes file which is less ambiguous.
+
+test <- test %>%
+  select(-Sites)
+
+
+test %>% 
+  select(filename, Orf, Name, number, tissue, TAs, call, insertion) %>%
+  filter(Orf==\"MB2971c\")  
+
+
+data_8_10 <- test
+nrow(data_8_10 %>% distinct(Orf) %>% arrange(Orf))
+#4047
+
+# i'm going to do this with edited data below instead
+#save(data_8_10, file=\"~/tn_seq/In_vivo_github/resamp_data1.RData\")
+
+```"

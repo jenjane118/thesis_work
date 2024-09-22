@@ -1,0 +1,52 @@
+"0","```r
+
+resamp_glpd2 <- data_ortho %>% dplyr::filter(Orf==\"MB3330c\") %>%
+  select(c(filename, `Mean Ctrl`, `Mean Exp`, `log2FC`,`Sum Ctrl`, `Sum Exp`, `Delta Mean`,
+            `insertion`,`TAs`,`call`))
+glpd2_df <- as.data.frame(t(resamp_glpd2))
+# change filenames to match insertion data
+glpd2_df[1,]<- sub(\"GW\\w_\", \"\", glpd2_df[1,])
+colnames(glpd2_df) <- glpd2_df[1,]
+glpd2_df <- glpd2_df[2:nrow(glpd2_df), ]
+View(glpd2_df)
+
+#reorder insertion data to match order of resampling data
+col_order <- colnames(ins_glpd2[,2:ncol(ins_glpd2)])
+# insertion data includes input file, so add this first to resampling data with NA as values
+glpd2_df <- glpd2_df %>% mutate(MbA27=c(NA, NA, NA, NA, NA, NA, 0.37, 26, \"NE\"))
+glpd2_df <- glpd2_df %>% select(col_order)
+
+# make rownames the TA sites
+rn <- ins_glpd2$TA_site
+ins_glpd2 <- ins_glpd2 %>% select(-c(TA_site))
+rownames(ins_glpd2) <- rn
+glpd2_all <- rbind(glpd2_df, ins_glpd2)
+glpd2_all <- glpd2_all %>% rownames_to_column()
+
+
+resamp_aspc <- data_ortho %>% dplyr::filter(Orf==\"MB0344c\")%>%
+  select(c(filename, `Mean Ctrl`, `Mean Exp`, `log2FC`,`Sum Ctrl`, `Sum Exp`, `Delta Mean`,
+            `insertion`,`TAs`,`call`))
+aspc_df <- as.data.frame(t(resamp_aspc))
+aspc_df[1,] <- sub(\"GW\\w_\", \"\", aspc_df[1,])
+
+colnames(aspc_df) <- aspc_df[1,]
+aspc_df <- aspc_df[2:nrow(aspc_df), ]
+View(aspc_df)
+
+#reorder insertion data to match order of resampling data
+col_order <- colnames(ins_aspc[,2:ncol(ins_aspc)])
+# insertion data includes input file, so add this first to resampling data with NA as values
+aspc_df <- aspc_df %>% mutate(MbA27=c(NA, NA, NA, NA, NA, NA, 0.37, 20, \"GA\"))
+aspc_df <- aspc_df %>% select(col_order)
+
+# make rownames the TA sites
+rn <- ins_aspc$TA_site
+ins_aspc <- ins_aspc %>% select(-c(TA_site))
+rownames(ins_aspc) <- rn
+aspc_all <- rbind(aspc_df, ins_aspc)
+aspc_all <- aspc_all %>% rownames_to_column()
+
+write_csv(glpd2_all, here(\"lung_tnseq/Output/all_insertions_glpd2.csv\"))
+write_csv(aspc_all, here(\"lung_tnseq/Output/all_insertions_aspc.csv\"))
+```"

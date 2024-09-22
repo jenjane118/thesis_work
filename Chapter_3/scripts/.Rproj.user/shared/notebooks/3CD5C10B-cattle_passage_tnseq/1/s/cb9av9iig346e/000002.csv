@@ -1,0 +1,28 @@
+"0","```r
+# std resampling
+orig_rs <- read_delim(\"lung_tnseq/resampling_comb_20_08/GW2_MbA17.txt\", skip=7, col_names = T, delim=\"\t\")
+
+# using left tail for adj p-value
+left_rs <- read_delim(\"lung_tnseq/tpp_genewiz2/np_removed/resamp_29_09/resamp_ltail_perm_lung_tpp_MbA17.txt\", skip=6, col_names = T, delim=\"\t\")
+
+# with zg's removed
+zg_rs <- read_delim(\"lung_tnseq/resamp_07_10/resamp_nochange_MbA17.txt\", skip=6, col_names = T, delim=\"\t\")
+
+# with short genes and zg's removed
+short_rs <- read_delim(\"lung_tnseq/resamp_07_10/resamp_small_MbA17B.txt\", skip=6, col_names = T, delim=\"\t\")
+
+# count number of genes with p.adj <0.05
+nrow(orig_rs %>%
+  filter(`Adj. p-value` < 0.05))
+#104
+nrow(left_rs %>%
+       filter(`Adj. p-value` < 0.05))
+#156
+nrow(zg_rs %>%
+  filter(`Adj. p-value` < 0.05))
+#172
+nrow(short_rs %>%
+  filter(`Adj. p-value` < 0.05))
+#186
+
+```"

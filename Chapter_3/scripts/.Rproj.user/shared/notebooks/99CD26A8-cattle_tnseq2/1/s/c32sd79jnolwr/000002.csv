@@ -1,0 +1,21 @@
+"0","```r
+lung_sig_df <- data_ortho %>% 
+  mutate(signif = `Adj. p-value` < 0.05) %>%
+  group_by(Orf, tissue, number, signif) %>%
+  select(Orf, tissue, number, signif) %>%
+  filter(tissue == \"Lung\" & signif==TRUE)
+
+node_sig_df <- data_ortho %>% 
+  mutate(signif = `Adj. p-value` < 0.05) %>%
+  group_by(Orf, tissue, number, signif) %>%
+  select(Orf, tissue, number, signif) %>%
+  filter(tissue == \"Node\" & signif==TRUE)
+
+combo <- lung_sig_df %>%
+  filter(Orf %in% node_sig_df$Orf) %>%
+  group_by(Orf) %>%
+  distinct(Orf)
+nrow(combo)
+#223 are in lung and node. but I don't know if some are in same animal
+
+```"

@@ -1,0 +1,37 @@
+"0","```bash
+# make sure to use original transit resampling so adj p-value done with 2-tail pvalue (does this matter? matters which one selected in spreadsheet?)
+#changed name of my version to 'edited_resampling.py' and orig_resampling.py back to resampling.py
+# 3 May, both scripts identical and seem to be using lower tail for calculating q-value. May want to run these again? or at least calculate adj p-value from 2-tail vs one tail (both in dataframe)
+#data.append([gene.orf, gene.name, gene.desc, gene.n, mean1, mean2, sum1, sum2, test_obs, log2FC, pval_2tail, pval_utail, pval_ltail])
+#qval = stat_tools.BH_fdr_correction([row[-1] for row in data])
+# remove and re-add transit (uninstall left all scripts in site-packages)
+
+cd /Users/jenniferstiens/anaconda3/envs/tnseq/lib/python3.6/site-packages/pytransit/analysis
+
+conda activate tnseq
+cd ~/tn_seq/lung_tnseq/data/final_sample_wigs
+# with no change genes removed
+# all 6 lung vs all 6 nodes (TTR normalisation)
+transit resampling perm_lung_tpp_MbA09.wig,perm_lung_tpp_MbA02.wig,perm_lung_tpp_MbA06.wig,perm_lung_tpp_MbA08.wig,perm_lung_tpp_MbA12.wig,perm_lung_tpp_MbA17.wig perm_lung_tpp_MbA22.wig,perm_lung_tpp_MbA24.wig,perm_lung_tpp_MbA21.wig,perm_lung_tpp_MbA23.wig,perm_lung_tpp_MbA25.wig,perm_lung_tpp_MbA26.wig ~/tn_seq/data/Mbovis_resamp_07_10.prot_table ~/tn_seq/lung_tnseq/Output/lung_node_cor_all.txt
+
+#individually
+#pair9540
+transit resampling perm_lung_tpp_MbA06.wig perm_lung_tpp_MbA22.wig ~/tn_seq/data/Mbovis_resamp_07_10.prot_table ~/tn_seq/lung_tnseq/Output/lung_node_cor_9540.txt
+
+#with betageom
+transit resampling -n betageom perm_lung_tpp_MbA06.wig perm_lung_tpp_MbA22.wig ~/tn_seq/data/Mbovis_resamp_07_10.prot_table ~/tn_seq/lung_tnseq/Output/lung_node_cor_9540bg.txt
+
+
+#pair 9544
+transit resampling perm_lung_tpp_MbA09.wig perm_lung_tpp_MbA24.wig ~/tn_seq/data/Mbovis_resamp_07_10.prot_table ~/tn_seq/lung_tnseq/Output/lung_node_cor_9544.txt
+#pair 9534
+transit resampling perm_lung_tpp_MbA02.wig perm_lung_tpp_MbA21.wig ~/tn_seq/data/Mbovis_resamp_07_10.prot_table ~/tn_seq/lung_tnseq/Output/lung_node_cor_9534.txt
+#pair 9542
+transit resampling perm_lung_tpp_MbA08.wig perm_lung_tpp_MbA23.wig ~/tn_seq/data/Mbovis_resamp_07_10.prot_table ~/tn_seq/lung_tnseq/Output/lung_node_cor_9542.txt
+#pair 9547
+transit resampling perm_lung_tpp_MbA12.wig perm_lung_tpp_MbA25.wig ~/tn_seq/data/Mbovis_resamp_07_10.prot_table ~/tn_seq/lung_tnseq/Output/lung_node_cor_9547.txt
+#pair 9554
+transit resampling perm_lung_tpp_MbA17.wig perm_lung_tpp_MbA26.wig ~/tn_seq/data/Mbovis_resamp_07_10.prot_table ~/tn_seq/lung_tnseq/Output/lung_node_cor_9554.txt
+
+#run resampling with ALL lung samples against ALL node samples (used TTR on all)
+```"

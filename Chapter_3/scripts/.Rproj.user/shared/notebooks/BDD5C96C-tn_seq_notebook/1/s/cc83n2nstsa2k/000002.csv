@@ -1,0 +1,5 @@
+"0","```r
+# plot logfold change in volcano plot
+ggplot(data=resamp_results, aes(x=log2FC, y=-log10(Adj_p_value))) + geom_point()
+
+```"

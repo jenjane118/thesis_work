@@ -1,0 +1,71 @@
+"0","```r
+#pull in malone tables of functional categories
+
+library(dplyr)
+
+# get info from sheet 3 including orf pairs, gene names, functional categories, identical
+malone_df<-read.delim(\"data/Malone_orthologs.csv\", sep=\",\", header=FALSE, stringsAsFactors=F, skip=3)
+head(malone_df)
+malone_3<-select(malone_df, 2,3,4,6,11)
+head(malone_3)
+# remove duplicates (36 duplicates based on mbovis orf name)
+malone_3<-malone_3[!duplicated(malone_3$V3), ]
+
+# make dataframe for complete comparison based on mbovis ORFs
+bovis_mtb_df<-as.data.frame(matrix(0, nrow = length(bovis_hmm$gene), ncol = 8))
+colnames(bovis_mtb_df)<-c(\"Mbovis\", \"Mtb\", \"gene\", \"func_cat\", \"i/v\", \"alteration\", \"ess_bovis\", \"ess_mtb\")
+head(bovis_mtb_df)
+
+bovis_mtb_df$Mbovis    <- bovis_hmm$ORF
+bovis_mtb_df$gene      <- bovis_hmm$gene
+bovis_mtb_df$ess_bovis <- bovis_hmm$call
+head(bovis_mtb_df)
+
+for (i in 1:nrow(bovis_mtb_df)){
+  if (bovis_mtb_df$Mbovis[i] %in% malone_3$V3){
+    bovis_mtb_df$Mtb[i]    <- malone_3[which(malone_3$V3 == bovis_mtb_df$Mbovis[i]), 1]
+    bovis_mtb_df$`i/v`[i]  <- malone_3[which(malone_3$V3 == bovis_mtb_df$Mbovis[i]), 5]
+  }else{
+    bovis_mtb_df$Mtb[i]    <- \"\"
+    bovis_mtb_df$`i/v`[i]  <- \"\"
+  }
+  if (bovis_mtb_df$Mtb[i] %in% mtb_hmm$ORF){
+    bovis_mtb_df$ess_mtb[i] <- mtb_hmm[which(mtb_hmm$ORF == bovis_mtb_df$Mtb[i]), 3]
+  }
+  if (bovis_mtb_df$Mbovis[i] %in% malone_3$V3){
+    bovis_mtb_df$func_cat[i] <- malone_3[which(malone_3$V3 == bovis_mtb_df$Mbovis[i]), 4]
+  }else{
+    bovis_mtb_df$func_cat[i]    <- \"\"
+  }
+}
+
+View(bovis_mtb_df)
+
+# work on getting alteration from other sheets
+# column 2 is mbovis name, 13 is alteration
+#need to do for each of 9(?) sheets
+
+filenames <- list.files(\"data/Malone\", pattern=\"*.csv\", full.names=TRUE)
+filenames
+
+for (i in 1:9){
+    temp<-read.delim(filenames[i], sep=\",\", header=FALSE, stringsAsFactors=F, skip=1)
+    malone_temp<-select(temp, 2, 13)
+    for (j in 1:nrow(malone_temp)){
+      if (malone_temp$V2[j] %in% bovis_mtb_df$Mbovis){
+          bovis_mtb_df[which(bovis_mtb_df$Mbovis == malone_temp$V2[j]), 6] <- malone_temp$V13[j]
+      }
+    }
+}
+
+for (i in 1:nrow(bovis_mtb_df)){
+  if (bovis_mtb_df$alteration[i] == 0){
+      bovis_mtb_df$alteration[i] <- \"\"
+  }
+}
+
+View(bovis_mtb_df)
+
+#write table
+write.table(bovis_mtb_df, file = 'results/full_compare.csv', quote = FALSE, sep = '\t', row.names=FALSE)
+```"

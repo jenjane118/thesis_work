@@ -1,0 +1,3 @@
+"0","```bash
+head -50 <file.fastq>
+```"

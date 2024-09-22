@@ -1,0 +1,10 @@
+"0","```bash
+
+cat final_samples.txt | awk '{ gsub(\"GW2\", \"perm_lung_tpp\") ; print $0 }' > final_samples1.txt
+cat final_samples1.txt | while read line; do echo ${line}.wig; done > final_samples.txt
+
+# copy wig files for files in final_samples list to new directory
+
+for file in $(cat ~/git/tn_seq/lung_tnseq/final_samples.txt); do cp \"$file\" ~/git/tn_seq/lung_tnseq/final_sample_wigs; done
+
+```"

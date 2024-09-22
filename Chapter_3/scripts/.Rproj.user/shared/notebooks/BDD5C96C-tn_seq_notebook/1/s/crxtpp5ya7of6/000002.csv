@@ -1,0 +1,3 @@
+"0","```bash
+filter_tradis_tags -f SRR4113440_1.fastq -t TCGGGGACTTATCAGCCAACCTGTTA -m 2 -o SRR4113440_1.tag.fastq
+```"

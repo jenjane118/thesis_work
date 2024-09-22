@@ -1,0 +1,4 @@
+"0","```bash
+transit resampling Dejesus_wig/SRR411328_1.wig bovis_hiseq/tpp/bovis_hiseq_tpp_19.wig,bovis_hiseq/tpp/bovis_hiseq_tpp_20.wig,bovis_hiseq/tpp/bovis_hiseq_tpp_21.wig mtbH37Rv.prot_table,bovis_on_tb.prot_table dj_resampling_output.txt
+
+```"

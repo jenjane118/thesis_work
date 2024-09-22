@@ -1,0 +1,40 @@
+"0","```r
+lung_vol <- data_ortho %>% 
+  filter(tissue == \"Lung\") %>%
+  mutate(signif = `Adj. p-value` < 0.05) %>%
+  group_by(Orf) %>%
+  add_tally(signif, name=\"num_sig\") 
+
+dat <- lung_vol %>%
+  filter(`Adj. p-value` < 0.05) %>%
+  distinct(Orf, num_sig) 
+
+
+dat2 <- data_ortho %>% 
+  filter(tissue == \"Lung\") %>%
+  mutate(signif = `Adj. p-value` < 0.05)
+
+ggplot(dat) +
+  stat_ecdf(aes( x = num_sig), pad=F, geom=\"bar\", fill=\"blue\")
+  #stat_density(aes( x = num_sig))
+  #geom_histogram(aes( x = num_sig), binwidth = 1, fill=\"blue\")
+
+ggsave(here(\"images/signif_ecdf.png\"))
+
+dat_plot <- dat
+for (i in 1:20){
+  dat_plot[,2 + i] <- ifelse(dat_plot$num_sig >= i, 1, 0)
+  }
+
+colnames(dat_plot)[3:22] <- seq(1,20)
+
+freq = as.data.frame(colSums(dat_plot[3:22]))
+
+ggplot(freq) +
+  geom_col(aes(x = seq(1,20), y = `colSums(dat_plot[3:22])`/nrow(dat_plot))) +
+  labs(x = c(\"minimum number of samples\"), y=c(\"Proportion of signficant Orfs\"))
+
+ggsave(here(\"images/min_num_samples.png\"))
+
+
+```"

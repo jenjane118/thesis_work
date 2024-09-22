@@ -1,0 +1,6 @@
+"0","```bash
+transit export combined_wig B_R1.wig,D_R1.wig,G_R1.wig $my_path/refseqs/mbovis/mbovis.prot_table bovis_combined_nonorm.wig -n nonorm
+
+transit export combined_wig B_R1.wig,D_R1.wig,G_R1.wig $my_path/refseqs/mbovis/mbovis.prot_table bovis_combined_TTR.wig -n TTR
+
+```"

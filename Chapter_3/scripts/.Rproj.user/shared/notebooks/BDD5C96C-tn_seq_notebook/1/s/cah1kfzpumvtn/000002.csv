@@ -1,0 +1,21 @@
+"0","```r
+# import results
+dj39_resamp_results<-read.delim(\"~/Data/resampling_results/dj_resampling_439.txt\", comment.char = \"#\", sep=\"\t\", header=F, stringsAsFactors=F)
+head(dj39_resamp_results)
+colnames(dj39_resamp_results)<-c(\"Orf\",\"Name\",	\"Desc\",	\"Sites\", \"Mean_Ctrl\",
+        \"Mean_Exp\",	\"log2FC\",	\"Sum_Ctrl\",	\"Sum_Exp\", \"Delta_Mean\", \"p_value\",	\"Adj_p_value\")
+
+dj39_resamp_10<-dj39_resamp_results[which(dj39_resamp_results$Adj_p_value<0.10),]
+nrow(dj39_resamp_10)
+#38 
+dj39_resamp_05<-dj39_resamp_results[which(dj39_resamp_results$Adj_p_value<0.05),]
+nrow(dj39_resamp_05)
+#32  
+# which of these have log fold change >2? (Carey et al)
+dj39_lfc_signif<-dj39_resamp_05[which(abs(dj39_resamp_05$log2FC) > 2.0),]
+nrow(dj39_lfc_signif)
+#26 
+# how many total have logfold change >2?
+dj39lf2<-dj39_resamp_results[which(abs(dj39_resamp_results$log2FC) > 2.0),]
+nrow(dj39lf2) #1107
+```"

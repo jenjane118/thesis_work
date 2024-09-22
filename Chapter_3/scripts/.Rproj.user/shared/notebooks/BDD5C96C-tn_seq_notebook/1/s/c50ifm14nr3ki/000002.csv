@@ -1,0 +1,3 @@
+"0","```bash
+bacteria_tradis -v -f fastqs.txt -t GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA -r /d/in16/u/sj003/refseqs/Mtb/Mtb_H37Rv.fasta
+```"

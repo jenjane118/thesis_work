@@ -1,0 +1,5 @@
+"0","```bash
+./bs download project --name MbovisTradis -o $my_path/MbovisTradis/
+./bs contents project --name \"MbovisTradis\"
+./bs download file --id \"14200555041\"
+```"

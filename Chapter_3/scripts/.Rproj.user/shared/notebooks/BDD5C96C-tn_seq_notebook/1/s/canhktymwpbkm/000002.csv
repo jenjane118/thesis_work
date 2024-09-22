@@ -1,0 +1,8 @@
+"0","```r
+wig_19_21<-matrix(0,nrow(b19), 2)
+wig_19_21[,1]<-b19[,1]
+wig_19_21[,2]<-b19[,2] + b21[,2]
+#wig_19_21[10000:10005,]
+#b19[10000:10005,]
+write.table(wig_19_21, \"add_19_21.wig\", sep=\"\t\", quote = F, row.names = F, col.names = F)
+```"

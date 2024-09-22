@@ -1,0 +1,26 @@
+"0","```bash
+
+# these weren't sorted and forgot to index
+#samtools view -S -b lung_tpp_MbA16.sam  > lung_tpp_MbA16.bam
+#samtools view -S -b lung_tpp_MbA21.sam  > lung_tpp_MbA21.bam
+scp sj003@ssh.cryst.bbk.ac.uk:/d/in16/u/sj003/lung_tpp_MbA16.bam ~/tn_seq/
+
+
+
+module load samtools
+
+samtools view -S -b cattle_genewiz2/lung_tpp_MbA16.sam > mbovis/in_vivo/lung_MbA16.bam
+samtools sort mbovis/in_vivo/lung_MbA16.bam -o mbovis/in_vivo/lung_MbA16.sorted.bam
+rm mbovis/in_vivo/lung_MbA16.bam
+samtools index mbovis/in_vivo/lung_MbA16.sorted.bam
+
+samtools view -S -b cattle_genewiz2/lung_tpp_MbA21.sam  > mbovis/in_vivo/node_MbA21.bam
+samtools sort mbovis/in_vivo/node_tpp_MbA21.bam -o mbovis/in_vivo/node_MbA21.sorted.bam
+rm node_MbA21.bam
+samtools index mbovis/in_vivo/node_MbA21.sorted.bam
+
+# pipe first two steps to avoid generating unsorted .bam file
+samtools view -S -b cattle_genewiz2/lung_MbA21.sam | samtools sort - -o mbovis/in_vivo/node_MbA21.sorted.bam
+samtools index mbovis/in_vivo/node_MbA21.sorted.bam
+
+```"

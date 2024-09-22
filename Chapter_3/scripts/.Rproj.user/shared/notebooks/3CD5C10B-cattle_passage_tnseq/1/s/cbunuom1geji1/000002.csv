@@ -1,0 +1,136 @@
+"0","```bash
+```r
+myco_node <- good_data %>%
+  filter(Sites > 5) %>%
+  filter(innoc_call !=\ES\) %>%
+  filter(tissue == \Node\) %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  filter(Orf %in% myco_genes) %>%
+  mutate(group = \mycobactin synth\)
+ 
+pdim_node <- good_data %>%
+  filter(Sites >5 ) %>%
+  filter(innoc_call !=\ES\) %>%
+  filter(tissue == \Node\) %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  filter(Orf %in% pdim_genes) %>%
+  mutate(group = \pdim synth\)
+
+# red_sulfate_n <- good_data %>%
+#   filter(Sites >5 ) %>%
+#   filter(innoc_call !=\ES\) %>%
+#   filter(tissue == \Node\) %>%
+#   group_by(filename) %>%
+#   mutate(sample_median = median(log2FC)) %>%
+#   ungroup() %>%
+#   mutate(norm_lfc = log2FC-sample_median) %>%
+#   group_by(Orf) %>%
+#   mutate(mean_lfc = mean(log2FC)) %>%
+#   filter(Orf %in% red_sulfate_genes) %>%
+#   mutate(group = \sulf assim\)
+
+carb_n <- good_data %>%
+  filter(Sites >5 ) %>%
+  filter(innoc_call !=\ES\) %>%
+  filter(tissue == \Node\) %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  filter(Orf %in% carb_genes) %>%
+  mutate(group = \carb transport\)
+  
+chol_kstr2_n <- good_data %>%
+  filter(Sites >5 ) %>%
+  filter(innoc_call !=\ES\) %>%
+  filter(tissue == \Node\) %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  filter(Orf %in% chol_kstr2_genes) %>%
+  mutate(group = \kstr2 regulon\)
+  
+mce_n <- good_data %>%
+  filter(Sites >5 ) %>%
+  filter(innoc_call !=\ES\) %>%
+  filter(tissue == \Node\) %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  filter(Orf %in% mce_genes) %>%
+  mutate(group = \chol import/mce4\)
+
+chol_ring_n <- good_data %>%
+  filter(Sites >5 ) %>%
+  filter(innoc_call !=\ES\) %>%
+  filter(tissue == \Node\) %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  filter(Orf %in% chol_ring_genes) %>%
+  mutate(group = \chol ring catab\)
+
+base_nodes <- good_data %>%
+  filter(Sites >5 ) %>%
+  mutate(group = \background\) %>%
+  filter(innoc_call !=\ES\) %>%
+  filter(tissue == \Node\) %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  ungroup() %>%
+  mutate(mean_lfc = NA) #set as NA so segments won't show
+  
+median(base_nodes$log2FC)
+#-0.77
+median(base_nodes$norm_lfc)
+#0
+
+data_node <- NULL
+data_node <- full_join(myco_node, pdim_node)
+#data_node <- full_join(data_node, red_sulfate_n)
+data_node <- full_join(data_node, carb_n)
+data_node <- full_join(data_node, chol_kstr2_n)
+data_node <- full_join(data_node, mce_n)
+data_node <- full_join(data_node, chol_ring_n)
+data_node <- full_join(data_node, base_nodes)
+data_node$group <- as.factor(data_node$group)
+
+node <-ggplot(data=data_node, group=group) +
+        geom_violin( aes(x = group, y = norm_lfc, fill = group),
+                     trim=F, draw_quantiles = 0.5) +
+        geom_segment( aes(
+              x    = match(group, levels(group)) - 0.1,
+			        xend = match(group, levels(group)) + 0.1,
+		          y    = mean_lfc,
+			        yend = mean_lfc ),
+		          col='white') +
+        scale_fill_manual(values=c(\grey50\, \red3\,
+                          \#00FF00\,\dodgerblue3\, \yellow2\,
+                          \violetred2\,\turquoise3\,
+                          \chocolate4\)) +
+        #scale_fill_brewer(type = \qual\, palette = \Spectral\) +
+        ggtitle(label = \Gene groups: Nodes\, subtitle = \white = mean LFC for Orf; black = median LFC for group
+```"

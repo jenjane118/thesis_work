@@ -1,0 +1,28 @@
+"0","```r
+
+node_filenames <- data_ortho %>% dplyr::filter(tissue==\"Node\") %>% distinct(filename) %>% pull()
+
+node_numbers <- data_ortho %>% dplyr::filter(tissue==\"Node\") %>%
+  distinct(number) %>%
+  pull()
+
+lung_filenames <- data_ortho %>%
+  dplyr::filter(tissue==\"Lung\") %>%
+  dplyr::filter(number %in% node_numbers) %>%
+  distinct(filename) %>% pull()
+
+pair9540 <- data_ortho %>% dplyr::filter(number==\"9540\") %>% distinct(filename) %>% pull()
+pair9544 <- data_ortho %>% dplyr::filter(number==\"9544\") %>% distinct(filename) %>% pull()
+pair9534 <- data_ortho %>% dplyr::filter(number==\"9534\") %>% distinct(filename) %>% pull()
+pair9542 <- data_ortho %>% dplyr::filter(number==\"9542\") %>% distinct(filename) %>% pull()
+pair9547 <- data_ortho %>% dplyr::filter(number==\"9547\") %>% distinct(filename) %>% pull()
+pair9554 <- data_ortho %>% dplyr::filter(number==\"9554\") %>% distinct(filename) %>% pull()
+
+#all lung samples
+lung_filenames <- data_ortho %>%
+  dplyr::filter(tissue==\"Lung\") %>%
+  distinct(filename) %>% pull()
+lung_filenames2 <- sub(\"\\w+_Mb\", \"perm_lung_tpp_MB\", lung_filenames)
+lung_filenames2 <- paste(lung_filenames2, \".wig\", sep=\"\")
+paste(lung_filenames2, collapse=\",\")
+```"

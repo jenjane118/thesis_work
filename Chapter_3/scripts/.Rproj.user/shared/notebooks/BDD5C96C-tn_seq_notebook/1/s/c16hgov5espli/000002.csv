@@ -1,0 +1,5 @@
+"0","```bash
+transit export igv <file> <prot_table> <output file>
+
+transit export igv B_R1.wig $my_path/refseqs/mbovis/mbovis.prot_table B_R1_igv.wig
+```"

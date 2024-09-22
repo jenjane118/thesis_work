@@ -1,0 +1,132 @@
+mbo01100	Metabolic pathways
+mbo01110	Biosynthesis of secondary metabolites
+mbo01120	Microbial metabolism in diverse environments
+mbo01200	Carbon metabolism
+mbo01210	2-Oxocarboxylic acid metabolism
+mbo01212	Fatty acid metabolism
+mbo01230	Biosynthesis of amino acids
+mbo01232	Nucleotide metabolism
+mbo01250	Biosynthesis of nucleotide sugars
+mbo01240	Biosynthesis of cofactors
+mbo01220	Degradation of aromatic compounds
+mbo00010	Glycolysis / Gluconeogenesis
+mbo00020	Citrate cycle (TCA cycle)
+mbo00030	Pentose phosphate pathway
+mbo00040	Pentose and glucuronate interconversions
+mbo00051	Fructose and mannose metabolism
+mbo00052	Galactose metabolism
+mbo00053	Ascorbate and aldarate metabolism
+mbo00500	Starch and sucrose metabolism
+mbo00520	Amino sugar and nucleotide sugar metabolism
+mbo00620	Pyruvate metabolism
+mbo00630	Glyoxylate and dicarboxylate metabolism
+mbo00640	Propanoate metabolism
+mbo00650	Butanoate metabolism
+mbo00660	C5-Branched dibasic acid metabolism
+mbo00562	Inositol phosphate metabolism
+mbo00190	Oxidative phosphorylation
+mbo00680	Methane metabolism
+mbo00910	Nitrogen metabolism
+mbo00920	Sulfur metabolism
+mbo00061	Fatty acid biosynthesis
+mbo00071	Fatty acid degradation
+mbo00100	Steroid biosynthesis
+mbo00121	Secondary bile acid biosynthesis
+mbo00561	Glycerolipid metabolism
+mbo00564	Glycerophospholipid metabolism
+mbo00565	Ether lipid metabolism
+mbo00600	Sphingolipid metabolism
+mbo00592	alpha-Linolenic acid metabolism
+mbo01040	Biosynthesis of unsaturated fatty acids
+mbo00230	Purine metabolism
+mbo00240	Pyrimidine metabolism
+mbo00250	Alanine, aspartate and glutamate metabolism
+mbo00260	Glycine, serine and threonine metabolism
+mbo00270	Cysteine and methionine metabolism
+mbo00280	Valine, leucine and isoleucine degradation
+mbo00290	Valine, leucine and isoleucine biosynthesis
+mbo00300	Lysine biosynthesis
+mbo00310	Lysine degradation
+mbo00220	Arginine biosynthesis
+mbo00330	Arginine and proline metabolism
+mbo00340	Histidine metabolism
+mbo00350	Tyrosine metabolism
+mbo00360	Phenylalanine metabolism
+mbo00380	Tryptophan metabolism
+mbo00400	Phenylalanine, tyrosine and tryptophan biosynthesis
+mbo00410	beta-Alanine metabolism
+mbo00430	Taurine and hypotaurine metabolism
+mbo00450	Selenocompound metabolism
+mbo00460	Cyanoamino acid metabolism
+mbo00470	D-Amino acid metabolism
+mbo00480	Glutathione metabolism
+mbo00515	Mannose type O-glycan biosynthesis
+mbo00514	Other types of O-glycan biosynthesis
+mbo00540	Lipopolysaccharide biosynthesis
+mbo00542	O-Antigen repeat unit biosynthesis
+mbo00541	O-Antigen nucleotide sugar biosynthesis
+mbo00550	Peptidoglycan biosynthesis
+mbo00552	Teichoic acid biosynthesis
+mbo00571	Lipoarabinomannan (LAM) biosynthesis
+mbo00572	Arabinogalactan biosynthesis
+mbo00543	Exopolysaccharide biosynthesis
+mbo00730	Thiamine metabolism
+mbo00740	Riboflavin metabolism
+mbo00750	Vitamin B6 metabolism
+mbo00760	Nicotinate and nicotinamide metabolism
+mbo00770	Pantothenate and CoA biosynthesis
+mbo00780	Biotin metabolism
+mbo00785	Lipoic acid metabolism
+mbo00790	Folate biosynthesis
+mbo00670	One carbon pool by folate
+mbo00860	Porphyrin metabolism
+mbo00130	Ubiquinone and other terpenoid-quinone biosynthesis
+mbo00900	Terpenoid backbone biosynthesis
+mbo00906	Carotenoid biosynthesis
+mbo00903	Limonene degradation
+mbo00907	Pinene, camphor and geraniol degradation
+mbo00523	Polyketide sugar unit biosynthesis
+mbo01053	Biosynthesis of siderophore group nonribosomal peptides
+mbo00946	Degradation of flavonoids
+mbo00311	Penicillin and cephalosporin biosynthesis
+mbo00332	Carbapenem biosynthesis
+mbo00261	Monobactam biosynthesis
+mbo00521	Streptomycin biosynthesis
+mbo00525	Acarbose and validamycin biosynthesis
+mbo00401	Novobiocin biosynthesis
+mbo00999	Biosynthesis of various plant secondary metabolites
+mbo00362	Benzoate degradation
+mbo00627	Aminobenzoate degradation
+mbo00364	Fluorobenzoate degradation
+mbo00625	Chloroalkane and chloroalkene degradation
+mbo00361	Chlorocyclohexane and chlorobenzene degradation
+mbo00623	Toluene degradation
+mbo00622	Xylene degradation
+mbo00643	Styrene degradation
+mbo00930	Caprolactam degradation
+mbo00621	Dioxin degradation
+mbo00626	Naphthalene degradation
+mbo00984	Steroid degradation
+mbo00983	Drug metabolism
+mbo03020	RNA polymerase
+mbo03010	Ribosome
+mbo00970	Aminoacyl-tRNA biosynthesis
+mbo03060	Protein export
+mbo04122	Sulfur relay system
+mbo03050	Proteasome
+mbo03018	RNA degradation
+mbo03030	DNA replication
+mbo03410	Base excision repair
+mbo03420	Nucleotide excision repair
+mbo03430	Mismatch repair
+mbo03440	Homologous recombination
+mbo03450	Non-homologous end-joining
+mbo03250	Viral life cycle
+mbo02010	ABC transporters
+mbo03070	Bacterial secretion system
+mbo02020	Two-component system
+mbo02024	Quorum sensing
+mbo05152	Tuberculosis
+mbo01501	beta-Lactam resistance
+mbo01502	Vancomycin resistance
+mbo01503	Cationic antimicrobial peptide (CAMP) resistance

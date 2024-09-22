@@ -1,0 +1,42 @@
+"0","```r
+pt <- read_delim(\"Mbovis_LT708304.prot_table\", delim=\"\t\", col_names = F)
+
+zg <- scan(\"lung_tnseq/zero_genes.txt\", what=\"\", sep=\"\n\")
+length(zg)
+
+# remove all genes with zero in all samples (including input) 
+# removes 487 genes
+new_pt <- pt %>%
+  filter( !X9 %in% zg)
+nrow(new_pt)
+#3558
+# remove all trna genes (only CDS)
+new_pt <- new_pt %>%
+  filter(X6 == \"CDS\")
+nrow(new_pt)
+#3549
+
+#write prot table with genes removed
+
+write_tsv(new_pt, \"Mbovis_resamp_07_10.prot_table\", col_names = F)
+
+#genes with sites <5, not already removed by above
+small_genes <- good_data %>%
+  group_by(Orf, Sites, innoc_call) %>%
+  distinct(Orf, Sites, innoc_call) %>%
+  filter(Sites <5) %>%
+  filter(!Orf %in% zg)%>%
+  filter(grepl(\"MB\", Orf))
+nrow(small_genes)
+#451
+
+# remove these from edited prot table
+no_small <- new_pt %>%
+  filter(!X9 %in% small_genes$Orf)
+nrow(no_small)
+#3098
+
+#write prot table
+write_tsv(no_small, \"Mbovis_site_filter.prot_table\", col_names = F)
+
+```"

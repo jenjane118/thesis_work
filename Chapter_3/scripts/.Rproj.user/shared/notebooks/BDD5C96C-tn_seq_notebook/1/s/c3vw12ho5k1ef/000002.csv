@@ -1,0 +1,21 @@
+"0","```bash
+#!/bin/bash
+# module load python/v3
+# usage: nohup bash $my_path/scripts/mtb_single_tpp.sh >& mtb_single.out &
+# run from: /d/in16/u/sj003/dejesus_mtb/data/ 
+
+
+FILES=*_1.fastq
+for file in $FILES
+
+do
+        filename=$(basename \"$file\")
+        filename=\"${filename%.*}\"
+
+        echo \"File on the loop:         ${file}\"
+        
+        tpp -bwa /s/software/bwa/bwa/bwa -ref /d/in16/u/sj003/refseqs/Mtb/Mtb_H37Rv.fasta -reads1 ${file} -output /d/in16/u/sj003/dejesus_mtb/tpp_results/${filename}
+
+
+done 
+```"

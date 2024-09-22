@@ -1,0 +1,6 @@
+"0","```r
+sample_list <- good_data %>%
+  distinct(filename)
+
+write_delim(sample_list, \"lung_tnseq/final_samples.txt\", delim=\"\n\", col_names = F)
+```"

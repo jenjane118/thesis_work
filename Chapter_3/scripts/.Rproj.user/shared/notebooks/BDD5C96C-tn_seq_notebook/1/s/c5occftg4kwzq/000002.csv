@@ -1,0 +1,3 @@
+"0","```bash
+transit hmm -n none bovis_hiseq/tpp/bovis_hiseq_tpp_21.wig bovis_best.prot_table hmm_bovis_hiseq_21.wig
+```"

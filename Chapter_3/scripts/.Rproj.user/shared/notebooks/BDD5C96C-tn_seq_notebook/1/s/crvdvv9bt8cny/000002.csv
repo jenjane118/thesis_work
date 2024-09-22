@@ -1,0 +1,17 @@
+"0","```python
+#!/usr/bin python3
+# comma_list.py
+# make comma separated list of files from directory
+
+import os
+os.chdir(\".\")
+with open ('wig_list.txt', 'w') as f:
+    file_list = []
+    for root, dirs, files in os.walk(\".\"):
+        for filename in files:
+            if filename.endswith('.wig'):
+                file_list.append(filename)
+    file_string = ','.join(file_list)
+    f.write(file_string)
+f.close()
+```"

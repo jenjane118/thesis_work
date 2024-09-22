@@ -1,0 +1,3 @@
+"0","```bash
+grep -c -e ACAAAACAGCGGAGAGAACAACATG $my_path/mbovis/21768_MycomarT7phagemid_1_trimmed.fastq
+```"

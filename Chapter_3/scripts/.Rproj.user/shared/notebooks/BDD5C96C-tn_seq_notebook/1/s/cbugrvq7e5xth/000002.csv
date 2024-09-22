@@ -1,0 +1,3 @@
+"0","```bash
+nohup bash $my_path/scripts/dejesus_iterate_tpp.sh >& dejesus_iterate_tpp.out &
+```"

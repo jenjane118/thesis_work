@@ -1,0 +1,35 @@
+"0","```r
+# make tibble
+#GW1 (only one file from genewiz run 1)
+GW1_meta <- tibble(
+  filename = c( \"GW1_MbA016\"),
+  number = c(\"9543\"),
+  tissue = c(\"Lung\"),
+  insertion = c(\"0.16\")
+)
+
+GW2_meta <- tibble(
+  filename = c(\"GW2_MbA02\",\"GW2_MbA04\",\"GW2_MbA05\",\"GW2_MbA06\",\"GW2_MbA07\", \"GW2_MbA08\",\"GW2_MbA09\",\"GW2_MbA10\",\"GW2_MbA11\",\"GW2_MbA12\",  \"GW2_MbA13\",\"GW2_MbA14\",\"GW2_MbA15\",\"GW2_MbA16\",\"GW2_MbA17\",\"GW2_MbA18\",\"GW2_MbA19\",\"GW2_MbA20\" , \"GW2_MbA21\" , \"GW2_MbA22\" , \"GW2_MbA23\" , \"GW2_MbA24\" ,\"GW2_MbA25\" ,\"GW2_MbA26\" , \"GW2_MbA28\"),
+  number = c(\"9534\", \"9536\", \"9539\", \"9540\", \"9541\", \"9542\", \"9544\", \"9545\", \"9546\", \"9547\", \"9548\", \"9549\", \"9550\", \"9551\", \"9554\", \"9555\", \"9556\", \"9589\", \"9534\", \"9540\", \"9542\", \"9544\", \"9547\", \"9554\", \"9533\"),
+  tissue = c(\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\",\"Lung\", \"Node\", \"Node\", \"Node\", \"Node\", \"Node\", \"Node\",\"Lung\"),
+  insertion = c(\"0.123\", \"0.177\", \"0.186\",\"0.167\",\"0.215\",\"0.174\",\"0.241\",\"0.235\",\"0.212\",\"0.279\",\"0.171\",\"0.18\",\"0.22\", \"0.219\",\"0.209\",\"0.174\",\"0.203\",\"0.166\",\"0.259\",\"0.227\",\"0.215\",\"0.227\",\"0.174\",\"0.18\",\"0.131\")
+)
+
+sample_meta <- full_join(GW1_meta, GW2_meta)
+
+
+#join to nested resampling data
+#total_data <- nest_join(df1, sample_meta, by = c(\"filename\" = \"sample\"))
+
+# use left join to get columns unnested and added, then don't need to unnest meta info
+data_8_10 <- unnest(df1, cols = 2) %>%
+        left_join(sample_meta)
+
+data_8_10 %>% 
+  select(filename, Orf, Name, number, tissue) %>%
+  filter(Orf==\"MB2971c\")  
+
+data_8_10 %>%
+  distinct(filename)
+#4047 orfs, 20 different 'numbers'(cattle), 26 filenames(samples)
+```"

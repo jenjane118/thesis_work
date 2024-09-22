@@ -1,0 +1,66 @@
+"0","```r
+library(dplyr)
+
+mtb_genes<-read.delim(\"results/dejesus-Mtb_genes.txt\", sep=\"\t\", header=FALSE, stringsAsFactors=F, skip=4)
+head(mtb_genes)
+
+mtb_hmm <- select(mtb_genes, 1, 2, 11)
+colnames(mtb_hmm) <- c(\"ORF\",\"gene\",\"call\")
+View(mtb_hmm)
+length(mtb_hmm$call)
+
+bovis_hmm <- select(hmm_results, 1, 2, 11)
+colnames(bovis_hmm) <- c(\"ORF\",\"gene\", \"call\")
+# have to trim whitespace before gene to compare with mtb
+bovis_hmm$gene<-trimws(bovis_hmm$gene)
+View(bovis_hmm)
+length(bovis_hmm$call)
+
+#this calls two for each gene, have to ask for 'unique'
+# get rid of extra lines 
+bovis_hmm<-unique(bovis_hmm)
+# order
+bovis_hmm<-bovis_hmm[order(bovis_hmm$ORF),]
+# remove all but MB orf names
+# put into df1 all rows where pedigree_dhl starts with CCB133$
+p1 <- 'Mb'
+bovis_hmm <- subset(bovis_hmm, grepl(p1, bovis_hmm$ORF) )
+# remove any hyphens after the orf name
+for (i in 1:nrow(bovis_hmm)){
+  bovis_hmm$ORF[i]<-sub(\"\\s-$\", \"\", bovis_hmm$ORF[i], ignore.case=TRUE)
+}
+View(bovis_hmm)
+length(bovis_hmm$gene)
+
+# read in ortholog file
+orthologs<-read.delim(\"data/mb_mtb_orthologs_1.txt\", sep=\",\", header=FALSE, stringsAsFactors=F, skip=1)
+colnames(orthologs)<-c(\"bovis\", \"mtb\", \"v/i\")
+View(orthologs)
+nrow(orthologs)
+
+# make table with orf names, calls in bovis and mtb
+comp_calls<-as.data.frame(matrix(0, nrow = length(orthologs$bovis), ncol = 5))
+colnames(comp_calls)<-c(\"bovis\", \"mt\", \"v/i\", \"mb_call\", \"mt_call\")
+head(comp_calls)
+
+for (i in 1:nrow(orthologs)){
+  #if (orthologs$bovis[i] %in% bovis_hmm$ORF){
+  comp_calls$bovis[i]   <- orthologs$bovis[i]
+  comp_calls$mt[i]      <- orthologs$mtb[i]
+  comp_calls$`v/i`[i]   <- orthologs$`v/i`[i]
+  if (orthologs$bovis[i] %in% bovis_hmm$ORF){
+    comp_calls$mb_call[i] <- bovis_hmm[which(bovis_hmm$ORF == orthologs$bovis[i]),3]
+  }else{
+    comp_calls$mb_call[i] <- \"N/A\"
+    }
+  if (orthologs$mtb[i] %in% mtb_hmm$ORF){
+    comp_calls$mt_call[i] <- mtb_hmm[which(mtb_hmm$ORF == orthologs$mtb[i]),3]
+  }else{
+    comp_calls$mt_call[i] <- \"N/A\"
+    }
+}
+View(comp_calls)
+
+# write table
+write.table(comp_calls, file = 'results/comp_orfs.txt', quote = FALSE, sep = '\t', row.names=FALSE)
+```"

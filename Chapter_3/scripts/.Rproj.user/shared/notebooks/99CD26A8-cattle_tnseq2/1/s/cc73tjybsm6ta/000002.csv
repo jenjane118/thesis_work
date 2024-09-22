@@ -1,0 +1,55 @@
+"0","```r
+library(here)
+library(tidyverse)
+library(glue)
+# get TA sites from HMM file
+hmm_file <- read_tsv(here(\"lung_tnseq\", \"data\", \"tpp_genewiz2\", \"transit_18_08_21\", \"hmm_MbA027_loess.txt\"), skip=18, col_names=F)
+#hmm_file <- read_tsv(\"lung_tnseq/data/tpp_genewiz2/transit_18_08_21/hmm_MbA027_loess.txt\", skip=18, col_names=F)
+colnames(hmm_file) <- c(\"TA_site\", \"input\", \"ES\", \"GD\", \"NE\", \"GA\", \"call\", \"gene\")
+
+gene_sites <- hmm_file %>%
+  #filter(gene==\"MB0948c_(mntH)\") %>%
+  filter(gene==\"MB2452c_(NA)\") %>%
+  select(TA_site, input)
+
+# get reads from all sample wigs
+load(\"~/git/Mbovis_in-vivo_Tnseq/resamp_data.RData\")
+files <- data_ortho %>%
+  distinct(filename)
+files <- files[-c(27),]
+# remove the GW1 file
+files <- files %>%
+  filter(filename != \"GW1_MbA016\")
+for (i in 1:nrow(files)){
+  sample = sub(\"GW2_\", \"\", as.character(files[i,]))
+  # get wig file
+  wig_file <- list.files(path = \"~/tn_seq/lung_tnseq/data/tpp_genewiz2/np_removed\", pattern = sample)
+  wig_file <- paste(\"~/tn_seq/lung_tnseq/data/tpp_genewiz2/np_removed\", wig_file, sep=\"/\")
+  # read into tibble
+  wig <- read_delim(wig_file, delim=\" \", skip=2, col_names = F)
+  # extract reads from TA sites that match gene
+  tas <- wig %>%
+    filter(X1 %in% gene_sites$TA_site)
+  gene_sites <- gene_sites %>%
+    mutate(\"sample.{sample}\" := tas$X2)
+}
+# add in \"GW1_MbA016\"
+wig <- read_delim(\"~/tn_seq/lung_tnseq/data/tpp_genewiz1/np_removed/perm_lung_tpp_MbA016.wig\", delim=\" \", skip=2, col_names = F)
+tas <- wig %>%
+    filter(X1 %in% gene_sites$TA_site)
+gene_sites <- gene_sites %>%
+    mutate(sample.MbA016 = tas$X2)               
+
+# make a total column
+gene_sites <- gene_sites %>%
+  mutate(total_output=rowSums(gene_sites[,3:28]))
+
+
+resamp_Mb2452c <- data_ortho %>%
+  select(filename, Orf, `Mean Ctrl`, `Mean Exp`, log2FC, `Sum Ctrl`, `Sum Exp`, `Delta Mean`, `pval-ltail`, `Adj. p-value`, number, tissue, insertion) %>%
+  filter(Orf==\"MB2452c\")
+
+#write to file
+write_tsv(gene_sites, here(\"lung_tnseq/Output/mb2452c_insertions.tsv\"), col_names = T)
+write_tsv(resamp_Mb2452c, here(\"lung_tnseq/Output/mb2452c.tsv\"), col_names = T)
+```"

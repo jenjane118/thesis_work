@@ -1,0 +1,23 @@
+"0","```bash
+#!/bin/bash
+
+# establish quality of tpp data with transit
+# iterate_tnseq_stats.sh from inside file directory
+
+FILES=*.wig
+
+for file in $FILES
+do
+
+  filename=$(basename \"$file\")
+  filename=\"${filename%.*}\"
+
+  echo \"File on the loop: 	    $filename\"
+  echo  \"File on the loop:      ${file}\"
+
+  transit tnseq_stats ${file} -o ${filename}.dat
+  
+  echo -e \"#####################################\n\n\"
+  
+done
+```"

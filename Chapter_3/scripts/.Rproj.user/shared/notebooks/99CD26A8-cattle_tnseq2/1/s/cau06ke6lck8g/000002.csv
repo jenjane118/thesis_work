@@ -1,0 +1,146 @@
+"0","```r
+total_genes <- nrow(data_ortho %>% distinct(Orf) %>% filter(grepl(\"MB\", Orf)))
+#4000
+NE_genes <- nrow(data_ortho %>% filter(call==\"NE\") %>% distinct(Orf) %>% filter(grepl(\"MB\", Orf)))
+#3092  (3126 total, including non-cds genes)
+
+# calculate number of ne genes with insertions
+ne_sample_ins_genes <- nrow(data_ortho %>%
+  filter(call == \"NE\") %>%
+  filter(`Sum Exp`!=0) %>%
+  distinct(Orf))
+#2920
+
+
+
+# this finds normalised non-zero ta sites
+sample_ins_genes <- data_ortho %>%
+  filter(`Sum Exp`!=0) %>%
+  group_by(filename) %>%
+  summarise(genes_insertions = n()) %>%
+  mutate(perc_total = round( genes_insertions / total_genes, 3) *100)
+  
+ne_sample_ins_genes <- data_ortho %>%
+  filter(`Sum Exp`!=0) %>%
+  group_by(filename) %>%
+  filter(call == \"NE\") %>%
+  summarise(ne_genes_insertions = n()) %>%
+  mutate(perc_NE = round( ne_genes_insertions / NE_genes, 3) *100)
+
+View(sample_ins_genes)
+View(ne_sample_ins_genes)
+
+sample_ins_genes <- full_join(sample_ins_genes, ne_sample_ins_genes, by=\"filename\")
+
+# will the genes with sum exp ==0 be same as my zero genes list? prob not because doesn't included input library as requirement
+nrow(data_ortho %>% filter(`Sum Exp`==0) %>% distinct(Orf))
+#1712
+# I don't think normalised sum is accurate
+
+# zero genes list
+zg_list <- read_delim(here(\"lung_tnseq\", \"Output\", \"zero_genes.txt\"), delim=\"\n\", col_names = F)
+nrow(zg_list)
+zg_1 <- as.list(as.character(zg_list$X1))
+length(unlist(zg_1)[grepl(\"MB\", unlist(zg_1))])
+#451 (genes excluded from resampling)
+
+# Run python find zero genes script without the input directory, only 638 genes have no insertions in any of the samples, so that would be out of all genes (4047-638) but these have SOME insertions (though we decided they were probs noise because so few reads)
+
+# what if run python script to find genes WITH insertions? Run without input library
+# first all non-zero ta sites
+nzg <- read_lines(here(\"data\", \"non_zero_genes_samples.txt\"))
+nzg <- nzg[grepl(\"MB\", nzg)]
+length(nzg)
+#3662
+
+# run with same threshold as before: more than 5 at one site and sum >55 (3386)
+adj_nzg <- read_lines(here(\"data\", \"adj_non_zero_genes_samples.txt\"))
+adj_nzg <- adj_nzg[grepl(\"MB\", adj_nzg)]
+length(adj_nzg)
+#3382
+
+
+# check with hmm file
+input_hmm <- read_delim(here(\"lung_tnseq\", \"data\", \"tpp_genewiz2\", \"transit_18_08_21\", \"hmm_MbA027_loess_genes.txt\"), delim = \"\t\", skip = 3, col_names = T)
+
+es_genes <- input_hmm %>% filter(call==\"ES\")
+es_genes %>% filter(`NE sites` != 0)
+#489
+
+es_genes %>% filter(ORF == \"MB0210c\")
+# 23 TA sites, 	20 ES sites, 	3 NE sites,	mean =	1087.5, call=	ES
+
+# find Orfs with no insertions at all
+es_genes %>% filter(`GD sites` != 0 | `NE sites` != 0 | `GA sites` != 0)
+#157 genes that are ES but have some insertions at other NE sites
+
+
+## normalised non-zero read counts
+input_genes_ins <- nrow(data_ortho %>%
+  filter(`Sum Ctrl`!=0) %>%
+  distinct(Orf) )
+
+#input_insertions <-input_hmm %>% filter(mean != 0)
+#no_input_ins <- nrow(input_insertions[grepl(\"MB\", input_insertions)])
+#3485 insertions
+
+# need to calculate number of ne genes with insertions/ total ne genes
+ne_input_genes_ins <- nrow(data_ortho %>%
+  filter(call == \"NE\") %>%
+  filter(`Sum Ctrl`!=0) %>%
+  distinct(Orf) )
+#2908
+
+
+input_ins_genes <- c(\"Input library\", input_genes_ins, round(input_genes_ins/total_genes, 3)*100, ne_input_genes_ins, round(ne_input_genes_ins/NE_genes, 3)*100)
+sample_ins_genes <- rbind(sample_ins_genes, input_ins_genes)
+
+#change character vectors to dbl for numbers
+to_change <- c(\"genes_insertions\", \"ne_genes_insertions\", \"perc_total\", \"perc_NE\")
+sample_ins_genes <- sample_ins_genes %>% mutate_at(to_change, as.double)
+
+View(sample_ins_genes)
+
+# add number of TA insertions and total read count (TA sites)
+# create df to hold all values from tn_stats files, one row for each sample
+file_list <- list.files(path=\"lung_tnseq/tpp_genewiz2/tn_stats\", pattern = \"\\.tn_stats\")
+tpp_df <- data.frame(matrix(0, nrow=length(file_list), ncol=32))
+# read in tn_stats files
+for (i in 1:length(file_list)){
+  tpp_stats <- readLines(paste(\"lung_tnseq/tpp_genewiz2/tn_stats/\", file_list[i], sep=\"\"))
+  headers <- gsub(\":.+\", \"\", tpp_stats)
+  colnames(tpp_df)<- gsub(\"# \", \"\", headers)
+  tpp_df[i,] <-gsub(\".+: \", \"\", tpp_stats)
+}
+# remove files not being included in data eg: MbA01_R1_001.fastq
+#tpp_df$read1[grepl(\"MbA*_\", tpp_df$read1)]
+
+# add one file from gw1 (MbA016)
+tpp_stats <- readLines(\"lung_tnseq/tpp_genewiz1/tn_stats/lung_tpp_MbA016.tn_stats\")
+tpp_stats
+tpp_df[31,] <- gsub(\".+: \", \"\", tpp_stats)
+tpp_df$read1[31] <- sub(\"/Volumes/Data_disk/bovis_lung_hiseq/fastq_data/\", \"\", tpp_df$read1[31])
+
+
+read_counts <- tpp_df %>%
+  select(read1, `read_count (TA sites only, for Himar1)`, TAs_hit) %>%
+  mutate(read1=sub(\"_R1_001.fastq\", \"\", read1)) %>%
+  mutate(read1 = paste(\"GW2_\", read1, sep=\"\")) %>%
+  mutate(read1 = replace( read1, read1==\"GW2_MbA016\", \"GW1_MbA016\"))
+
+#substring(tpp_df$read1, regexpr(\"_\", tpp_df$read1)  )
+#substring(string, regexpr(\":\", string) + 1)
+
+
+full_df <- left_join(sample_ins_genes, read_counts, by=c(\"filename\" = \"read1\")) 
+sample_gene_info <-
+  full_df %>%
+  rename(\"total_reads\" = \"read_count (TA sites only, for Himar1)\") %>%
+  relocate(total_reads, .after = filename) %>%
+  relocate(TAs_hit, .after = total_reads)
+  
+sample_gene_info$TAs_hit[27] = 27751
+sample_gene_info$total_reads[27] = 3275193
+
+#write_delim(sample_gene_info, \"~/tn_seq/Output/gene_insertion_summary.txt\", delim=\"\t\")
+```"

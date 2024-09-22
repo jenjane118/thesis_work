@@ -1,0 +1,24 @@
+"0","```r
+hmm_results<-read.delim(\"~/Data/hmm2_bovis_hiseq_combo_genes.wig\", 
+                        sep=\"\t\", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+head(hmm_results)
+
+results_21<-read.delim(\"~/Data/hmm_bovis_hiseq_21_genes.wig\",
+                       sep=\"\t\", header=F, stringsAsFactors = F,
+                       comment.char = \"#\")
+
+compare_21<-matrix(0, nrow=nrow(hmm_results), ncol=4)
+compare_21[,1]<-hmm_results$V1
+compare_21[,2]<-hmm_results$V11
+compare_21[,3]<-results_21$V11
+compare_21[,4] <- ifelse(compare_21[,2]==compare_21[,3], \"yes\", \"no\")
+results_19_21<-read.delim(\"~/Data/hmm_bovis_add_19_21_genes.wig\",
+           sep=\"\t\", header=F, stringsAsFactors = F,
+           comment.char = \"#\")
+head(results_19_21)
+
+View(compare_21)
+## changes 395 calls
+
+```"

@@ -1,0 +1,5 @@
+"0","```r
+#look at gene Rv3599c/MB3610c
+
+data_ortho %>% dplyr::filter(Orf==\"MB3610c\")
+```"

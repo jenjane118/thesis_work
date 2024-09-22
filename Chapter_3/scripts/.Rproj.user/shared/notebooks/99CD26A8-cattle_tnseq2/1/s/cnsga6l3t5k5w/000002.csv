@@ -1,0 +1,150 @@
+"0","```r
+
+library(here)
+library(tidyverse)
+
+# read in data
+data_ortho <- readRDS(file=here(\"resamp_data.RData\"))
+
+mtbvac_genes <- c(\"MB0780\", \"MB0781\", \"MB2955\")
+novel_genes <- c(\"MB1033\", \"MB2991c\", \"MB3747\" )
+gene_names <- c(\"phoP\", \"phoR\", \"fadD26\")
+#are any of these genes ES or <5 insertions?
+data_ortho %>%
+  filter(Orf %in% mtbvac_genes | Orf %in% novel_genes) %>%
+  #filter(Sites <5) NONE
+  filter(call == \"ES\") #none
+
+#both plots together (facet wrap)
+mtbvac <- data_ortho %>%
+  filter(Orf %in% mtbvac_genes) %>%
+  filter(call!=\"ES\") %>%
+  #filter(tissue == \"Lung\") %>%
+  mutate(signif = `Adj. p-value` < 0.05)
+mtbvac$signif <- as.factor(mtbvac$signif)
+
+#plot with gene name instead of Orf
+p <- ggplot(mtbvac, aes(x=Name, y=log2FC, fill=tissue)) +
+  geom_boxplot(outlier.shape = NA) +   # hides outliers 
+  scale_fill_manual(values=c(\"deepskyblue3\", \"darkseagreen3\")) +
+  guides(fill = FALSE) +    #removes legend for fill in boxplot
+  #plot points on top of boxplots
+  geom_jitter(alpha=0.8, size=2, width = .1,
+              aes(color=signif)) +
+  scale_color_manual(name = \"Adj. p-value <0.05\", 
+                    labels = c(\"Non-significant\", \"Significant\"), 
+                    values = c(\"grey60\", \"purple3\")) +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = \"grey95\", colour = \"grey95\"),
+        axis.text.x = element_text(angle = 90, vjust = 0.3,
+                      hjust=1, size=10, face = \"bold.italic\"),
+        plot.title = element_text(hjust = 0.5),
+        axis.title.x = element_blank(),
+        legend.title = element_blank()) +
+  ggtitle(label=\"MTBVAC genes\") +
+  facet_wrap( ~tissue, labeller = as_labeller(tissue_names))
+p
+ggsave(here(\"images/mtbvac_boxplot.png\"), height=8, width=8)
+
+# with both lung and node together
+p2 <- ggplot(mtbvac, aes(x=Name, y=log2FC)) +
+  geom_boxplot(outlier.shape = NA, fill=\"darkseagreen3\") +   # hides outliers 
+  guides(fill = FALSE) +    #removes legend for fill in boxplot
+  #plot points on top of boxplots
+  coord_cartesian(ylim = c(-14, 4)) +
+  geom_jitter(alpha=0.8, size=2, width = .1,
+              aes(color=signif)) +
+  scale_color_manual(values = c(\"grey60\", \"purple3\")) +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = \"grey95\", colour = \"grey95\"),
+        axis.text.x = element_text(size=14, face = \"bold.italic\"),
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size=12, face=\"bold\"),
+        axis.text.y = element_text(size=10, face = \"bold\"),
+        legend.title = element_blank(),
+        legend.position = \"none\") +
+  ggtitle(label=\"MTBVAC genes attenuated in Mbovis\", subtitle = \"p-adj < 0.05 in purple\")
+p2
+ggsave(here(\"images/mtbvac_boxplot.png\"), height=6, width=4)
+
+
+
+
+#novel genes
+novel <- data_ortho %>%
+  filter(Orf %in% novel_genes) %>%
+  mutate(signif = `Adj. p-value` < 0.05)
+novel$signif <- as.factor(novel$signif)
+
+# are any es or <5 sites?
+novel %>% filter(TAs <5) #no
+novel %>% filter(call==\"ES\") #no
+
+novel_labels <-c(\"MB1033/Rv1006\", \"MB2991c/Rv2967c\", \"MB3747/Rv3720\")
+
+p <- ggplot(novel, aes(x=Orf, y=log2FC, fill=tissue)) +
+  geom_boxplot(outlier.shape = NA) +   # hides outliers 
+  scale_fill_manual(values=c(\"deepskyblue3\", \"darkseagreen3\")) +
+  guides(fill = FALSE) +    #removes legend for fill in boxplot
+  geom_jitter(alpha=0.8, size=2, width = .1,
+              aes(color=signif)) +
+  scale_color_manual(name = \"Adj. p-value <0.05\", 
+                    labels = c(\"Non-significant\", \"Significant\"), 
+                    values = c(\"grey60\", \"purple3\")) +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = \"grey95\", colour = \"grey95\"),
+        axis.text.x = element_text(angle = 90, vjust = 0.5,
+                      hjust=1, size=10, face = \"bold.italic\"),
+        plot.title = element_text(hjust = 0.5)) +
+  ggtitle(label=\"novel genes\") +
+  scale_x_discrete(breaks = novel_genes, labels= novel_labels) +
+  facet_wrap( ~tissue)
+p
+ggsave(here(\"images/novel_genes_boxplots.png\"))
+
+#boxplot for paper discussion genes (16 March, 2022)
+
+gene_names <- c(\"MB2971c\", \"MB2972c\", \"MB1029c\", \"MB0344c\", \"MB3330c\")
+
+paper <- data_ortho %>%
+  filter(Orf %in% gene_names) %>%
+  mutate(signif = `Adj. p-value` < 0.05)
+paper$signif <- as.factor(paper$signif)
+
+View(paper)
+
+# are any es or <5 sites?
+paper %>% filter(TAs <5) #no
+paper %>% filter(call==\"ES\") #no
+
+paper_labels <-c(\"Mb2971c/Rv2947c\n(pks15/1)\", \"Mb2972c/Rv2948c\n(fadD22)\", \"Mb1029c/Rv1002c\", \"Mb0344c/Rv0337c\n(aspC)\", \"Mb3330c/Rv3302c\n(glpD2)\")
+
+brief_labels <- c(\"pks15/1\", \"fadD22\", \"Rv1002c\", \"aspC\", \"glpD2\")
+p <- ggplot(paper, aes(x=Orf, y=log2FC, fill=tissue)) +
+  geom_boxplot(outlier.shape = NA) +   # hides outliers 
+  scale_fill_manual(values=c(\"deepskyblue3\", \"darkseagreen3\")) +
+  guides(fill = FALSE) +    #removes legend for fill in boxplot
+  geom_jitter(alpha=0.8, size=2, width = .1,
+              aes(color=signif)) +
+  scale_color_manual(name = \"Adj. p-value <0.05\", 
+                    labels = c(\"Non-significant\", \"Significant\"), 
+                    values = c(\"grey60\", \"purple3\")) +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = \"grey95\", colour = \"grey95\"),
+        axis.text.x = element_text(angle = 90, vjust = 0.5,
+                      hjust=1, size=10, face = \"bold.italic\"),
+        plot.title = element_text(hjust = 0.5),
+        axis.title.x = element_blank(),
+        legend.title = element_text(size=9),
+        legend.text = element_text(size=7)) +
+  ggtitle(label=\"Selected Attenuating Mutations\") +
+  scale_x_discrete(breaks = gene_names, labels= paper_labels) +
+  facet_wrap( ~tissue)
+p
+ggsave(here(\"images/paper_genes_boxplots.png\"), height=8, width=12, dpi=300)
+ggsave(here(\"images/paper_genes_boxplots.pdf\"), height=8, width=12, dpi=300)
+ggsave(here(\"images/paper_genes_boxplots.jpeg\"), height=8, width=12, dpi=300, bg=\"white\")
+
+```"

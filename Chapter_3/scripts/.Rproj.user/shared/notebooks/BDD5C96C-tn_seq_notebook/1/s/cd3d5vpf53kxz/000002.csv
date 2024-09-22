@@ -1,0 +1,3 @@
+"0","```bash
+tpp -bwa ~/anaconda3/envs/tnseq/bin/bwa -ref ~/git/tn_seq/data/Mbovis_AF2122_97.fasta -reads1 ~/Data/bovis_hiseq/MbA019_R1_001.fastq -output bovis_hiseq_tpp
+```"

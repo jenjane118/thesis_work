@@ -1,0 +1,4 @@
+"0","```bash
+transit resampling perm_lung_tpp_MBA09.wig,perm_lung_tpp_MBA016.wig,perm_lung_tpp_MBA02.wig,perm_lung_tpp_MBA04.wig,perm_lung_tpp_MBA05.wig,perm_lung_tpp_MBA06.wig,perm_lung_tpp_MBA07.wig,perm_lung_tpp_MBA08.wig,perm_lung_tpp_MBA10.wig,perm_lung_tpp_MBA11.wig,perm_lung_tpp_MBA12.wig,perm_lung_tpp_MBA13.wig,perm_lung_tpp_MBA14.wig,perm_lung_tpp_MBA15.wig,perm_lung_tpp_MBA16.wig,perm_lung_tpp_MBA17.wig,perm_lung_tpp_MBA18.wig,perm_lung_tpp_MBA19.wig,perm_lung_tpp_MBA20.wig,perm_lung_tpp_MBA28.wig perm_lung_tpp_MbA22.wig,perm_lung_tpp_MbA24.wig,perm_lung_tpp_MbA21.wig,perm_lung_tpp_MbA23.wig,perm_lung_tpp_MbA25.wig,perm_lung_tpp_MbA26.wig ~/tn_seq/data/Mbovis_resamp_07_10.prot_table ~/tn_seq/lung_tnseq/Output/lung_node_cor_all_lung.txt
+
+```"

@@ -1,0 +1,55 @@
+"0","```r
+data_ortho <- readRDS(here(\"resamp_data.RData\"))
+# using all samples, matching genes with mean log2FC to compare node vs lung
+means_df <-  data_ortho %>%
+  group_by(Orf, tissue) %>%
+  summarise(Orf, tissue, meanlfc = mean(log2FC)) %>%
+  dplyr::filter(!is.na(meanlfc)) %>%
+  distinct(Orf, tissue, meanlfc)
+
+means_df <- means_df %>% spread(key=tissue, value=meanlfc)
+
+
+# if want to use only matched animals?
+node_animals <- data_ortho %>% dplyr::filter(tissue==\"Node\") %>% distinct(number)
+
+data_ortho %>% group_by(filename) %>% distinct(filename, tissue, number)
+
+paired_means <- data_ortho %>%
+  dplyr::filter(number %in% node_animals$number) %>%
+  group_by(Orf, tissue) %>%
+  summarise(Orf, tissue, meanlfc = mean(log2FC)) %>%
+  distinct(Orf, tissue, meanlfc)
+paired_means_df <- paired_means %>% spread(key=tissue, value=meanlfc)
+
+ggplot(means_df, aes(x=Lung, y=Node)) +
+  geom_point(colour = \"mediumblue\", alpha = 0.8) +
+  #geom_smooth(method=lm, se=FALSE) +
+  xlim(-12,5) +
+  ylim(-12,5) +
+  ggtitle(\"Mean log2 fold change for Lung vs Thoracic LN samples\") +
+  theme(plot.title = element_text(hjust=0.5)) + 
+  xlab(\"Lung\") +
+  ylab(\"Thoracic Lymph Nodes\")
+
+ggsave(here(\"images/scatterplot_lung_node.png\"))
+
+
+# what is actual correlation for unpaired samples
+ct <- cor.test(means_df$Lung, means_df$Node, method = \"spearman\")
+#rho = 0.8775726
+#p-value p-value < 2.2e-16
+# strong correlation
+ct$p.value
+#0
+
+ggplot(paired_means_df, aes(x=Lung, y=Node)) +
+  geom_point(colour = \"mediumblue\", alpha = 0.8) +
+  geom_smooth(method=lm, se=FALSE) +
+  ggtitle(\"Mean log2 fold change for paired Lung vs Thoracic LN samples\", subtitle = \"rho= \") +
+  theme(plot.title = element_text(hjust=0.5)) + 
+  xlab(\"Lung\") +
+  ylab(\"Thoracic Lymph Nodes\")
+
+
+```"

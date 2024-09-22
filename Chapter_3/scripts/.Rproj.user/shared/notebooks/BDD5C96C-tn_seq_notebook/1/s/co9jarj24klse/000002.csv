@@ -1,0 +1,3 @@
+"0","```bash
+bedtools genomecov -bga -ibam /d/in16/u/sj003/mbovis/bwa_mapped/2020_06_03_mem_BAMs/B_S1_L001_R1_001.sort.bam > /d/in16/u/sj003/mbovis/coverage/B1_S1.cov
+```"

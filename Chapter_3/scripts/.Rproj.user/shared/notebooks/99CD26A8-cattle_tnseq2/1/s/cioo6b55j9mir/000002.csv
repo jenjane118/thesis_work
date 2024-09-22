@@ -1,0 +1,102 @@
+"0","```r
+# make summary for spreadsheet 
+
+data_ortho %>% distinct(Orf) %>% filter(!grepl(\"MB\", Orf))
+
+new_summary <- data_ortho %>%
+  filter(grepl(\"MB\", Orf) ) %>%
+  mutate(signif = `Adj. p-value`<0.05) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  group_by(Orf, H37Rv_Ortholog, Name, TAs, call, func_cat, tissue, mean_lfc) %>%
+  summarise(num_signif = sum(signif==TRUE)) %>%
+  # create row index
+  mutate(i1 = row_number()) %>% 
+  spread(tissue, num_signif) %>%
+  select(-i1) %>%
+  arrange(Orf) %>%
+  rename(\"signif_lung\"=\"Lung\") %>%
+  rename(\"signif_node\"=\"Node\") %>%
+  #remove na column
+  select(where( ~!all(is.na(.x))
+    ))
+# add lung/node lfc
+
+# add log fold mean for just lung and node
+lung_meanlfc_df <- data_ortho %>%
+  filter(tissue==\"Lung\")%>%
+  mutate(signif = `Adj. p-value`<0.05) %>%
+  group_by(Orf, tissue) %>%
+  mutate(lung_meanlfc = mean(log2FC)) %>%
+  group_by(Orf, lung_meanlfc) %>%
+  distinct(Orf, lung_meanlfc) 
+
+node_meanlfc_df <- data_ortho %>%
+  filter(tissue==\"Node\")%>%
+  filter(grepl(\"MB\", Orf) ) %>%
+  mutate(signif = `Adj. p-value`<0.05) %>%
+  group_by(Orf, tissue) %>%
+  mutate(node_meanlfc = mean(log2FC)) %>%
+  group_by(Orf, node_meanlfc) %>%
+  distinct(Orf) 
+
+# add to summary for spreadsheet
+new_data <- left_join(new_summary, lung_meanlfc_df, by=\"Orf\", keep=FALSE)
+new_data <- left_join(new_data, node_meanlfc_df, by=\"Orf\", keep=FALSE)
+
+new_data <- new_data %>% 
+  relocate(node_meanlfc, .before =  signif_node) %>%
+  relocate(lung_meanlfc, .before = signif_lung) %>%
+  relocate(mean_lfc, .after = signif_node)
+
+new_summary <- new_data
+
+nrow(new_summary)
+#4000 (with resampled and non-sampled all added together: CDS)
+View(new_summary)
+
+# didn't need to do this because included info from transit earlier for other CDS
+# read in previous summary to get orig dataframe
+# all_genes <- read_delim(\"~/tn_seq/results/all_genes_summary.tsv\", delim=\"\t\", col_names = T)
+# nrow(all_genes)
+# #3998
+# # change values of mean_lfc, node_meanlfc, lung_meanlfc, signif_node, signif_lung to NA
+# 
+# new_genes <- as.list(new_summary$Orf)
+# #make df of genes not in new genes list (those not re-analysed)
+# d1 <- all_genes %>%
+#   filter(!Orf %in% new_genes) %>%
+#   select(-c(mean_lfc, node_meanlfc, lung_meanlfc, signif_node, signif_lung)) %>%
+#   mutate(mean_lfc = NA) %>%
+#   mutate(signif_lung = NA) %>%
+#   mutate(lung_meanlfc = NA) %>%
+#   mutate(signif_node = NA) %>%
+#   mutate(node_meanlfc = NA) 
+# #451 genes
+# 
+# # merge two dataframes, replacing rows in all_genes with rows in new_summary
+# #try with left join
+# try1 <- full_join(new_summary, d1, keep=F) %>%
+#   arrange(Orf)
+# nrow(try1)
+# #4000
+# 
+# # what is new in this one?
+# try1[!try1$Orf %in% all_genes$Orf,]
+# try1 %>%
+#   filter(grepl(\"MB2982\", Orf) )
+# 
+# # add missing info for MB2209 (fadD15) and MB2982cA (genes I added/edited because annotation was irregular--last time just removed because didn't start with 'MB')
+# 
+# try2 <- try1 %>%
+#   mutate(innoc_call = replace(innoc_call, Orf == \"MB2209\", \"NE\")) %>%
+#   mutate(func_cat = replace(func_cat, Orf== \"MB2209\", 
+#   \"lipid metabolism\")) %>%
+#   mutate(innoc_call = replace(innoc_call, Orf ==\"Mb2982cA\", \"NE\")) %>%
+#   mutate(func_cat = replace(func_cat, Orf==\"Mb2982cA\", \"intermediary metabolism and respiration\"))
+## FADD15	NA	HYPOTHETICAL PROTEIN	10	0	0	10	0	0.7000	168.14	NE
+## NA	Mb2982cA	possible glycosyl transferase	2	0	0	2	0	0.5000	1287.00	NE
+
+write_delim(new_summary, here(\"Output\", \"summary_11_10.tsv\"), delim = \"\t\")
+#should this be in tn_seq/lung_tnseq/Output?
+```"

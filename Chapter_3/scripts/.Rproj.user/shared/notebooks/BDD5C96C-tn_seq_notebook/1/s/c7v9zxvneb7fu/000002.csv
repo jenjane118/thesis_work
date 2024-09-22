@@ -1,0 +1,93 @@
+"0","```r
+
+tn_stats_df<-read.csv(\"bovis_combined_TTR.wig\", header=TRUE, sep = \"\t\", skip=6, row.names=NULL, col.names = c('position', 'B', 'D', 'G', 'gene'))
+View(tn_stats_df[1:50,])
+
+# df for sum of reads for each ta site
+comb_names<-c(\"position\", \"sum reads\", \"gene\")
+combined_df<-as.data.frame(matrix(0, nrow = nrow(tn_stats_df), ncol = 3))
+combined_df[,1]<-tn_stats_df[,1]
+for (i in 1:nrow(combined_df)){
+  combined_df[i,2]<-sum(tn_stats_df[i,2:4])
+}
+combined_df[,3]<-tn_stats_df[,5]
+colnames(combined_df)<-comb_names
+View(combined_df[0:200,])
+
+# find raw number of ta sites inserted for TTR normalised (sum of reads is not 0)
+tot_count <- combined_df[,2]
+ins_count<-0
+for (i in 1:length(tot_count)){
+  if (tot_count[i] != 0.0){
+    ins_count <- ins_count + 1
+  }
+}
+ins_count
+# 34178
+length(tot_count)
+# 73536
+insertion_density <- ins_count/length(tot_count)
+insertion_density
+# 0.4647792
+
+# max read count
+max(tot_count)
+# 100024.5  (uses normalisation factor?)
+
+# mean of no insertions per gene
+mean(tot_count)
+# 489.7486
+
+
+#non zero mean (mean of read counts at all non-zero sites)
+# change all zeros to na
+is.na(tot_count) <- tot_count==0.0
+tot_count[1:100]
+mean(tot_count, na.rm=TRUE) 
+# 1053.723
+
+
+# do this again with non_normal
+
+tn_non_stats_df<-read.csv(\"bovis_combined_nonorm.wig\", header=TRUE, sep = \"\t\", skip=6, row.names=NULL, col.names = c('position', 'B', 'D', 'G', 'gene'))
+View(tn_non_stats_df[1:20,])
+
+# df for sum of reads for each ta site
+comb_names<-c(\"position\", \"sum reads\", \"gene\")
+combined_non_df<-as.data.frame(matrix(0, nrow = nrow(tn_non_stats_df), ncol = 3))
+combined_non_df[,1]<-tn_non_stats_df[,1]
+for (i in 1:nrow(combined_non_df)){
+  combined_non_df[i,2]<-sum(tn_non_stats_df[i,2:4])
+}
+combined_non_df[,3]<-tn_non_stats_df[,5]
+colnames(combined_non_df)<-comb_names
+View(combined_non_df[0:200,])
+
+# find raw number of ta sites inserted for TTR normalised (sum of reads is not 0)
+tot_non_count <- combined_non_df[,2]
+ins_non_count<-0
+for (i in 1:length(tot_non_count)){
+  if (tot_non_count[i] != 0.0){
+    ins_non_count <- ins_non_count + 1
+  }
+}
+
+length(tot_non_count)
+# 73535   (why is this one less than ttr?)
+# 72450 is what Sharon gets
+# 73536 is what I get counting naively
+
+ins_non_count
+# 34178  (exactly same as normalised with TTR?)
+# same number of sites inserted but number of counts different
+max(tot_non_count)
+# 5913
+
+mean(tot_non_count)
+# 29.54797
+
+#non zero mean 
+is.na(tot_non_count) <- tot_non_count==0.0
+mean(tot_non_count, na.rm=TRUE) 
+# 63.57335
+```"

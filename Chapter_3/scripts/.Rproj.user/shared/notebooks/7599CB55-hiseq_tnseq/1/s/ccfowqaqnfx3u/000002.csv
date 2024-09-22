@@ -1,0 +1,26 @@
+"0","```r
+# sum up results file for Transit hmm for new bovis hiseq set
+
+hmm_results<-read.delim(\"hmm_bovis_hiseq_combo_genes.wig\", 
+                        sep=\"\t\", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+head(hmm_results)
+
+
+# change to just gene and call--will affect downstream plots
+bovis_hmm <- select(hmm_results, 2, 1, 11)
+colnames(bovis_hmm) <- c(\"gene\",\"ORF\", \"call\")
+# have to trim whitespace before gene to compare with mtb
+bovis_hmm$gene<-trimws(bovis_hmm$gene)
+View(bovis_hmm)
+length(bovis_hmm$call)
+
+#this calls two for each gene, have to ask for 'unique'
+length(unique(bovis_hmm$ORF))
+bovis_hmm<-unique(bovis_hmm)
+nrow(bovis_hmm)
+View(bovis_hmm)
+
+#write to .csv for sharon
+write.csv(bovis_hmm, \"hiseq_bovis_transit.csv\", quote=F)
+```"

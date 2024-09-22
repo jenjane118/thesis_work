@@ -1,0 +1,3 @@
+"0","```bash
+scp ~/path-to-file/file-to-be-moved sj003@ssh.cryst.bbk.ac.uk:/d/in16/u/sj003/
+```"

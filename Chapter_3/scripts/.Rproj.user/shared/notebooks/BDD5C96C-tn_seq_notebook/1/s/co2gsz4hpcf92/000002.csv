@@ -1,0 +1,34 @@
+"0","```r
+#nrow(rev_lfc_signif)
+#don't use rev because mapped onto bovis, better to compare original mapped onto tb
+nrow(lfc_signif)
+tb_signif<-lfc_signif$Orf
+tb_signif
+#57
+dj_39<-dj39_lfc_signif$Orf
+dj_39
+#26
+# any of these the same?
+u<-NULL
+u<-intersect(tb_signif, dj_39)
+u
+#[1] \"Rv0928\"  \"Rv1286\"  \"Rv1430\"  \"Rv1854c\" \"Rv2222c\" \"Rv2259\"  \"Rv2398c\" \"Rv2937\" 
+# [9] \"Rv2942\"  \"Rv3156\"  \"Rv3490\"  \"Rv3680\"  \"Rv3682\"
+length(u) #13
+nrow(dj_lfc_signif)
+#146
+q<-intersect(dj_lfc_signif$Orf, dj39_lfc_signif$Orf)
+length(q)
+#22
+
+# intersect all 3
+all<-intersect(q,u)
+#[1] \"Rv0928\"  \"Rv1286\"  \"Rv1430\"  \"Rv2222c\" \"Rv2259\"  \"Rv2398c\" \"Rv2937\"  \"Rv2942\" 
+# [9] \"Rv3156\"  \"Rv3490\"  \"Rv3680\"  \"Rv3682\" 
+length(all)
+#12
+# intersect of ours and most saturated
+x<-intersect(dj_lfc_signif$Orf, tb_signif )
+length(x)
+#36 (out of 57)
+```"

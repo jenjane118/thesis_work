@@ -1,0 +1,4 @@
+"0","```bash
+nohup tradis_gene_insert_sites -o m_bovis_BDG.csv -trim3 0.1 -j $my_path/refseqs/mbovis/LT708304_updated_aug19.gff D_S2.rmtag.out.LT708304.1.insert_site_plot.gz G_S3.rmtag.out.LT708304.1.insert_site_plot.gz B_S1.rmtag.out.LT708304.1.insert_site_plot.gz &>run_tradisinsert_out &
+
+```"

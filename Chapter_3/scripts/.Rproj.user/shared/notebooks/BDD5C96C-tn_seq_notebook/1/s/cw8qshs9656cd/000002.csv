@@ -1,0 +1,23 @@
+"0","```bash
+#!/bin/bash
+
+#assign all files ending in .sra to FILES variable
+FILES=*.sra
+
+#Loop over FILES and assign each to file
+
+for file in $FILES
+do
+	filename=$file
+	echo “File on the loop:			$file”
+
+	# validate file
+	/d/in16/u/sj003/sratoolkit/bin/vdb-validate ${file}
+
+	#use fasterq-dump to convert .sra files to .fastq files (-O for dest folder)
+	/d/in16/u/sj003/sratoolkit/bin/fasterq-dump -O /d/in16/u/sj003/ncbi/files/dejesus/ ${file}
+  
+	echo -e “#######################\n\n”
+
+done
+```"

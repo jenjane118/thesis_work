@@ -1,0 +1,56 @@
+"0","```r
+
+# filter data for p-value
+signif_summary <- data_ortho %>%
+  select(\"filename\", \"Orf\", \"TAs\", \"call\", \"H37Rv_Ortholog\", \"Name\", \"Desc\", \"func_cat\", \"number\", \"tissue\", \"log2FC\", \"Adj. p-value\", \"insertion\") %>%
+  #filter(abs(log2FC) >2 & `Adj. p-value` < 0.05) %>%
+  filter(`Adj. p-value` < 0.05) %>%
+  # group by gene
+  group_by(Orf) %>%
+  summarise(Orf, H37Rv_Ortholog, TAs, call, Name, Desc, func_cat, filename, insertion, tissue, number, log2FC, `Adj. p-value`)
+
+#test
+signif_summary %>% 
+  select(filename, Orf, number, tissue) %>%
+  filter(Orf==\"MB2971c\") 
+# 23 entries (3 filtered out)
+
+
+
+# how many genes with signif changes
+signif_summary %>% 
+  select(filename, Orf, log2FC) %>%
+  distinct(Orf) 
+#969 ( I think previous to this it was 796)
+
+View(signif_summary)
+write_csv(signif_summary, (here(\"Output\", \"signif_summary.csv\")))
+#write_csv(signif_summary, \"lung_tnseq/signif_summary.csv\")
+
+count_orfs_8_10 <- data_ortho %>%
+  select(\"filename\", \"Orf\", \"H37Rv_Ortholog\", \"Name\", \"TAs\", \"call\", \"func_cat\", \"number\", \"tissue\", \"log2FC\", \"Adj. p-value\") %>%
+  filter(`Adj. p-value` < 0.05) %>%
+  group_by(Orf) %>%
+  # calculate mean lfc for each orf
+  mutate(mean_lfc = mean(log2FC)) %>%
+  select(-c(filename, number, tissue, log2FC, `Adj. p-value`)) %>%
+  group_by(Orf) %>%
+  count(Orf, name=\"num_signif\")
+
+View(count_orfs_8_10)
+
+signif_genes <- count_orfs_8_10[count_orfs_8_10$num_signif > 5,]
+nrow(signif_genes)
+#241 genes signif in >5 samples
+
+#any genes signif change in positive direction
+data_ortho %>%
+  select(\"filename\", \"Orf\", \"Name\", \"Desc\", \"log2FC\", \"Adj. p-value\") %>%
+  filter(log2FC >0 & `Adj. p-value` < 0.05) %>%
+# group by gene
+  group_by(Orf) %>%
+  summarise(Orf, Name, Desc, filename, log2FC, `Adj. p-value`)
+# 0 rows
+
+
+```"

@@ -1,0 +1,22 @@
+"0","```bash
+```r
+
+#read in list of genes
+zg_list <- read_delim(\~/PycharmProjects/transit_tnseq/zero_genes.txt\, delim=\\n\, col_names = F)
+zg_1 <- as.list(as.character(zg_list$X1[300:320]))
+
+
+test_data <- good_data %>%
+  filter(Orf %in% zg_1) %>%
+  select(Orf, Sites, filename, `Sum Ctrl`, `Sum Exp`) %>%
+  arrange(Orf) 
+
+# use reported ta sites from hmm 
+hmm <- read_delim(\lung_tnseq/tpp_genewiz2/transit_18_08_21/hmm_MbA027_loess_genes.txt\, delim = \\t\, skip=3)
+hmm_tas <- cbind(hmm$ORF, hmm$TAs)
+colnames(hmm_tas) <- c(\gene\, \ta_count\)
+write_csv(ov_df, \lung_tnseq/gene_ta_list2.csv\)
+```
+```"
+"1","[1] 3982
+"

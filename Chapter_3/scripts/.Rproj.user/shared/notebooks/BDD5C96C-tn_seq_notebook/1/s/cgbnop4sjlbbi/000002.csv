@@ -1,0 +1,6 @@
+"0","```r
+new_res_df<-data.frame(results_19_21$V1, results_19_21$V2, results_19_21$V11)
+colnames(new_res_df)<-c(\"ORF\", \"name\", \"call\")
+View(new_res_df)
+write.csv(new_res_df, \"HMM_sum19_21.csv\", quote=F, row.names=F)
+```"

@@ -1,0 +1,4 @@
+"0","```bash
+# transit with HMM:
+transit hmm $my_path/dejesus_mtb/tpp_results/dejesus-Mtb-SRR4113427.wig $my_path/refseqs/mtbH37Rv.prot_table dejesus-Mtb-SRR4113427.txt 
+```"

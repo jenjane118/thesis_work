@@ -1,0 +1,3 @@
+"0","```bash
+ R CMD BATCH $my_path/scripts/TraDIS_summary_Mbovis-LT708304.1.R
+```"

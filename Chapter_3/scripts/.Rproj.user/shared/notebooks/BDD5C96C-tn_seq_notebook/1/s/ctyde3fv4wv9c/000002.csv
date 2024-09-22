@@ -1,0 +1,5 @@
+"0","```bash
+wc -l <file.fastq>
+# loop through and count reads:
+for file in $FILES; do filename=$file; wc -l $file; done;
+```"

@@ -1,0 +1,4937 @@
+---
+title: "Mycobacterium Tn-Seq"
+author: "Jennifer J. Stiens"
+date: "June 2020-"
+output:
+  html_notebook: default
+  #  df_print: paged
+  #html_document:
+  #pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+i_am("Tn_seq_project.Rproj")
+
+library(here)
+```
+
+
+
+# READING and RESOURCES
+
+1. Galaxy toolkit pipeline
+[Essential genes detection with Transposon insertion sequencing](https://galaxyproject.github.io/training-material/topics/genome-annotation/tutorials/tnseq/tutorial.html#count-the-number-of-insertion-per-ta-sites)
+
+2. DeJesus paper on saturated Mtb libraries
+[DeJesus et al, 2017. Comprehensive Essentiality Analysis of the Mycobacterium Tuberculosis Genome via Saturating Transposon Mutagenesis](https://pubmed.ncbi.nlm.nih.gov/28096490/)
+\cite{Dejesus2017}
+
+3. TRANSIT 
+[DeJesus, M.A., Ambadipudi, C., Baker, R., Sassetti, C., and Ioerger, T.R. (2015). TRANSIT - a Software Tool for Himar1 TnSeq Analysis. PLOS Computational Biology, 11(10):e1004401](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1004401)
+
+4. Transit HMM
+[DeJesus, M.A., Ioerger, T.R. A Hidden Markov Model for identifying essential and growth-defect regions in bacterial genomes from transposon insertion sequencing data. BMC Bioinformatics. 2013. 14:303](http://www.ncbi.nlm.nih.gov/pubmed/24103077)
+
+5. Re-sampling
+[Subramaniyam S, DeJesus MA, Zaveri A, Smith CM, Baker RE, Ehrt S, Schnappinger D, Sassetti CM, Ioerger TR. (2019). Statistical analysis of variability in TnSeq data across conditions using Zero-Inflated Negative Binomial regression. *BMC Bioinformatics*. 2019 Nov 21;20(1):603. doi: 10.1186/s12859-019-3156-z.](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6873424/)
+
+6. Tn-seq of M tb
+[Zhang YJ, Ioerger TR, Huttenhower C, et al. Global assessment of genomic regions required for growth in Mycobacterium tuberculosis. PLoS Pathog. 2012;8(9):e1002946. doi:10.1371/journal.ppat.1002946](https://pubmed.ncbi.nlm.nih.gov/23028335/)
+
+7. Tn-seq ncRNA
+[A comparison of dense transposon insertion libraries in the Salmonella serovars Typhi and Typhimurium](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3632133/)
+
+8. Transit docs
+[Transit/tpp docs](https://transit.readthedocs.io/en/latest/transit_running.html)
+
+9. BioTraDIS docs
+[BioTraDIS git hub](https://github.com/sanger-pathogens/Bio-Tradis)
+
+10. Tn-seq methods and protocols:  [Long, J. E. et al. Global Phenotypic Profiling. in Gene Essentiality: Methods and Protocols 1279, 79–95 (2015).](https://pubmed.ncbi.nlm.nih.gov/25636614/)
+
+11. Overview of structure and practice of Tn-Seq experiments: [1. Chao, M. C., Abel, S., Davis, B. M. & Waldor, M. K. The Design and Analysis of Transposon-Insertion Sequencing Experiments. Nat Rev Microbiol 14, 119–128 (2016).](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5099075/)
+
+
+# Project Directory Organisation
+
+
+```{bash}
+alias rm="rm -i"
+cd /d/in16/u/sj003
+my_path=$(echo $PWD)
+```
+
+### Directory for Mycobacteria project: /d/in16/u/sj003/
+
+```
+ls $my_path/
+bin  dejesus_mtb  mbovis  ncbi  refseqs  scripts
+```
+
+bin: has 'bs' for Illumina basespace downloading
+
+ncbi: has SRA files and configs for downloading with sra toolkit
+
+dejesus_mtb:  contains all library sequence files and analysis for dejesus Mtb project
+
+```
+ls $my_path/dejesus_Mtb/
+data  fastqc  multiqc  tpp_results  transit_results
+```
+
+mbovis: contains all library sequence files and analysis for mbovis project
+
+
+```
+ls $my_path/mbovis/
+biotradis                                   MbovisTradis_61826796.json
+B_S1_L001_R1_001.fastq.gz_13779964920.json  misc_data
+B_S1_L001_R1_001.fastq.gz_14200555041.json  multiqc
+bwa_mapped                                  tpp.cfg
+data                                        tpp_results
+fastqc                                      transit
+Mbovis_SampleSheet.csv
+```
+
+refseqs: Mtb and mbovis folders contain all reference sequences and annotation files
+
+
+```
+ls $my_path/refseqs/
+mbovis  Mtb
+```
+
+scripts: mainly bash scripts and parsers. will i put customised analysis scripts in here later??
+
+To transfer local files to thoth (from local terminal):
+
+```{bash}
+scp ~/path-to-file/file-to-be-moved sj003@ssh.cryst.bbk.ac.uk:/d/in16/u/sj003/
+```
+
+
+To transfer thoth files to local (on local terminal):
+
+```{bash}
+~ jenstiens$ scp sj003@ssh.cryst.bbk.ac.uk:/d/in16/u/sj003/mbovis/bwa_mapped/2020_06_03_BAMs/multiqc_report.html /Users/jenstiens/Tn_seq_project/aln_multiqc_report.html
+```
+
+
+# Data acquisition
+
+## Downloading mbovis sequencing data from Illumina Basespace:
+Install the 'bs' program in a 'bin' directory:
+
+```{bash}
+wget "https://api.bintray.com/content/basespace/BaseSpaceCLI-EarlyAccess-BIN/latest/1.1.0/amd64-linux/bs?bt_package=latest" -O $my_path/bin/bs
+```
+
+Change permissions
+
+```{bash}
+chmod u+x $my_path/bin/bs
+```
+
+Authenticate:
+
+```{bash}
+ ./bs auth
+```
+
+```
+Please go to this URL to authenticate:  https://basespace.illumina.com/oauth/device?code=aZsUH
+Welcome, Jennifer Stiens
+```
+
+
+Download data:
+
+```{bash}
+./bs download project --name MbovisTradis -o $my_path/MbovisTradis/
+./bs contents project --name "MbovisTradis"
+./bs download file --id "14200555041"
+```
+
+
+
+**Illumina basespace header info**
+
+[MiSeq reporter software](https://emea.support.illumina.com/content/dam/illumina-support/documents/documentation/software_documentation/miseqreporter/miseq-reporter-software-guide-15042295-05.pdf)
+
+first line of fastq file:
+
+```
+@M01637:39:000000000-CDG9B:1:1101:16320:1637 1:N:0:ATGCCT
+@<instrument>:<run number>:<flowcell ID>:<lane>:<tile>:<x-pos>:<y-pos> <read>:<is filtered>:<control number>:<sample number>
+```
+
+[FASTQ Files BaseSpace](https://help.basespace.illumina.com/articles/descriptive/fastq-files/)
+
+The R1 data from B library downloaded from basespace was wrong somehow. Reads are only 60bp long vs 151bp. Received new R1 data files from Ian at LSHTM and uploaded locally. These matched in length, but sequence headers lacked index. 
+
+**Used bash scripting to edit and add index to headers:**
+
+print number of times string appears in file:
+
+```{bash}
+grep -o 'N:0:AAACAT' B_S1_L001_R1_001.fastq | wc -l
+```
+
+edit headers of all reads:
+
+```{bash}
+awk '{if ($0 ~/^@M/) print substr($0, 1, length($0)-1)"AAACAT"; else print $0}' B_S1_L001_R1_001.fastq > B_S1_L001_R1_001_edited.fastq
+```
+
+(one of the seqs has adapter added on to quality b/c of @ symbol, found where problem was by using commands below)
+
+print longest line:
+
+```{bash}
+ awk '{ if (length($0) > max) {max = length($0); maxline = $0} } END { print maxline }' B_S1_L001_R1_001.fastq
+```
+
+find line number of file that has the string from above:
+(has adapter added on to quality b/c of @ symbol--changed awk script to '@M' to stop this from happening)
+
+```{bash}
+grep -n "@BBBBFFFFFBBGGGGGGGFGGHGHHHHGGHHHHHHFHHGFHHFFHHHHHHHGGGGECGHHCG?EGCEEGGG?EEEGGGGGGGGHHHHGGGHHEHHGDGGGGHHHGGGGGG?EEEGEGHGEFFHEFGHCCDCC?BGBF??-@DFFFF00BAAACAT" B_S1_L001_R1_001.fastq
+```
+
+After fixing the index sequence in header, R1 and R2 from B library still won't pair up properly. In some reads, the y-coordinates are different by one. Used the commands below to eliminate a couple of these reads:
+
+how to print only the sequence from read file:
+
+```{bash}
+sed -n ‘2~4p' file
+```
+
+print selected lines (like one sequencing read):
+
+```{bash}
+sed -n ‘9321,9324p’ file
+sed -n ‘9321,+3p’ file
+## without -n will print all other lines except for indicated lines
+```
+
+delete selected lines and print remaining lines to file:
+
+```{bash}
+sed '9321,+3d' B_S1_L001_R1_001.fastq > B_S1_L001_R1_001_edited.fastq
+```
+
+Unfortunately, more discrepancies kept popping up. Means we can't use paired reads for this library unless we try to get another copy. However, as these reads are already de-duplicated by the Illumina MiSeq software and do not contain barcodes, there is no further need for the R2. (See email from Ian: unlikely to map with certainty to particular TA site except for reads with some of transposon tag sequenced.)
+
+It seems that the reads are not barcoded (but as adapters are trimmed in MiSeq processing, can't know for sure), so there is no way to 'de-duplicate' the data as specified in DeJesus, etc, using a unique barcode and genomic suffix combination. 
+
+
+## Downloading Mycobacterium sequences (gff and feature tables)
+
+**16/06/2020 UPDATE**
+
+must use .gff file "LT708304_updated_aug19.gff" because there was a mistake in the NCBI uploaded sequence. This is file Dong has given me to use from Stephen Gordon's group who re-annotated genome https://www.microbiologyresearch.org/content/journal/acmi/10.1099/acmi.0.000129?crawler=true
+
+**from NCBI/Genbank to BBK server (08/06/2020):**
+
+There are two assemblies, but should be quite similar? v2 is from 2020
+https://ftp.ncbi.nih.gov/genomes/all/GCA/000/195/835/
+
+to download latest version:
+
+```{bash}
+wget ftp://ftp.ncbi.nih.gov/genomes/all/GCA/000/195/835/GCA_000195835.2_ASM19583v2/GCA_000195835.2_ASM19583v2_genomic.gff.gz 
+```
+
+**Downloading Mycobacterium feature sequences (gff and feature tables) from Ensembl to bbk server:**
+ftp://ftp.ensemblgenomes.org/pub/bacteria/release-47/gff3/bacteria_4_collection/mycobacterium_bovis_af2122_97/
+(must use chrome as ftp not working on safari)
+Could only download v1? But there was a v1.46 and a v1.47.Chromosome.chromosome. These were identical (used diff)
+
+```{bash}
+wget ftp://ftp.ensemblgenomes.org/pub/bacteria/release-47/gff3/bacteria_4_collection/mycobacterium_bovis_af2122_97/Mycobacterium_bovis_af2122_97.ASM19583v1.46.gff3.gz
+```
+
+List of all mbovis sequence and annotation files:
+thoth.cryst.bbk.ac.uk> ls mbovis
+
+These are downloaded via ftp from Genbank (above)
+GCA_000195835.2_ASM19583v2_feature_table.txt.gz
+GCA_000195835.2_ASM19583v2_genomic.gff.gz
+
+'protein table' made using gff_to_prot in tpp:
+
+```{bash}
+convert gff_to_prot_table <.gff> <.prot_table>
+```
+
+```{bash}
+LT708304.prot_table
+LT708304_updated_aug19.gff
+
+Mbovis_AF2122_97.fasta
+Mbovis_AF2122_97.fasta.amb
+Mbovis_AF2122_97.fasta.ann
+Mbovis_AF2122_97.fasta.bwt
+Mbovis_AF2122_97.fasta.pac
+Mbovis_AF2122_97.fasta.sa
+mbovis_ASM19583v2_feature_table.txt
+mbovis_ASM19583v2.gff
+mbovis_ASM19583v2.prot_table
+Mycobacterium_bovis_af2122_97.ASM19583v1.46.gff3
+Mycobacterium_bovis_af2122_97.ASM19583v1.47.chromosome.Chromosome.gff3
+```
+
+## Downloading DeJesus Mtb data from NCBI using SRA toolkit
+
+'All TnSeq data sets are publicly available on the NCBI Sequence Read Archive
+with accession number SRP083947 and BioProject accession number PRJNA341349.'
+
+There are 14 different libraries, each with two reads.
+
+```{bash}
+module load ncbi-sra/v2.10.5 (in /s/software/modules)
+```
+
+to get accession list and metadata for deJesus files from NCBI website:
+
+[ncbi link for accession SRP083947](https://www.ncbi.nlm.nih.gov/Traces/study/?acc=SRP083947&o=acc_s%3Aa)
+
+1. download 'Accession list' (SRR_Acc_List.txt.csv)
+2. transfer to ncbi/SRA folder
+
+Table of Libraries and Accession numbers:
+
+| Run Acc | SRA Acc | Lib No | Lib Name |
+|---------|---------|--------|----------|
+| SRR4113427 | SRX2084320 | 1 | WX-WT1 |
+| SRR4113428 | SRX2084321 | 2 | WX-WT2 |
+| SRR4113429 | SRX2084322 | 11 | SWP-WT7 |
+| SRR4113430 | SRX2084323 | 12 | CB-WT |
+| SRR4113431 | SRX2084324 | 13 | TraCS-053 |
+| SRR4113432 | SRX2084325 | 14 | TraCS-054 |
+| SRR4113433 | SRX2084326 | 3 | WX-WT3 |
+| SRR4113434 | SRX2084327 | 4 | WX-WT2 |
+| SRR4113435 | SRX2084328 | 5 | SWP-WT1 |
+| SRR4113436 | SRX2084329 | 6 | SWP-WT2 |
+| SRR4113437 | SRX2084330 | 7 | SWP-WT3 |
+| SRR4113438 | SRX2084331 | 8 | SWP-WT4 |
+| SRR4113439 | SRX2084332 | 9 | SWP-WT5 |
+| SRR4113440 | SRX2084333 | 10 | SWP-WT6 |
+
+
+
+
+to get a single library file from NCBI:
+
+```{bash}
+prefetch SRR4113427
+```
+
+
+download from .csv accession list:
+
+```{bash}
+prefetch $my_path/ncbi/SRR_Acc_List.txt.csv
+```
+
+
+script to perform validation step and fasterq-dump on each sra read file to convert .sra files to .fastq files and put in appropriate directory:
+
+```{bash sra_validation}
+#!/bin/bash
+
+#assign all files ending in .sra to FILES variable
+FILES=*.sra
+
+#Loop over FILES and assign each to file
+
+for file in $FILES
+do
+	filename=$file
+	echo “File on the loop:			$file”
+
+	# validate file
+	/d/in16/u/sj003/sratoolkit/bin/vdb-validate ${file}
+
+	#use fasterq-dump to convert .sra files to .fastq files (-O for dest folder)
+	/d/in16/u/sj003/sratoolkit/bin/fasterq-dump -O /d/in16/u/sj003/ncbi/files/dejesus/ ${file}
+  
+	echo -e “#######################\n\n”
+
+done
+```
+
+```{bash}
+bash sra_to_fastq.sh
+```
+
+```{bash}
+--split-files
+``` 
+
+puts seq in one file and quality line in next file. if i use fasterq_dump without split files, get two fastq files for each accession number, _1 and _2
+
+remove all .sra files
+
+
+## Download second set of bovis samples from DROPBOX
+
+[dropbox link from Sharon](https://www.dropbox.com/home/Iri%20Tn%20data/BaseSpace)
+
+
+(copy link from website and change dl=0 to dl=1):
+
+```{bash}
+wget -O Mbovis2_B_S1_R2.fastq.gz "https://www.dropbox.com/s/hoxmd0u9uyshbqp/MbovisB_S1_L001_R2_001.fastq.gz?dl=1"
+```
+
+
+
+# Quality control of TraDIS and TnSeq data
+
+*to loop unzip or gunzip multiple files in directory, use 
+```{bash}
+#"*.zip" in quotes as an argument
+unzip "*.zip"
+```
+
+1) Check for read length
+```{bash}
+head -50 <file.fastq>
+```
+
+
+2) Count number of reads:  R1 and R2 should match
+```{bash}
+wc -l <file.fastq>
+# loop through and count reads:
+for file in $FILES; do filename=$file; wc -l $file; done;
+```
+
+```{bash}
+find . -name '*.fastq' -exec wc -l {} +
+```
+
+
+
+
+3) Run fastqc
+```{bash}
+module load python/v3
+module load fastqc
+fastqc B_S1_L001_R2_001.fastq 
+firefox B_S1_L001_R2_001_fastqc.html
+```
+
+script to iterate through all files and run fastqc and multiqc:
+
+```{bash iterate_fastq}
+#!/bin/bash
+
+# iterate_fastqc.sh
+# usage: bash iterate_fastqc.sh
+
+FILES=*.fastq
+
+for file in $FILES
+do
+	filename=$(basename "$file")
+	filename="${filename%.*}"
+
+	echo "File on the loop: 	$filename"
+
+	#call fastQC quality analysis
+	/s/software/fastqc/v0.11.8/FastQC/fastqc ${file}
+
+	echo -e "########################\n\n"
+done
+
+
+# Run MultiQC
+# -f overwrites existing files, . runs with files in current directory, -o output directory
+echo "Running MultiQC..."
+/s/software/python/v3/bin/multiqc -f . -o /d/in16/u/sj003/dejesus_mtb/multiqc
+```
+
+![MultiQC report Mtb data](~/tn_seq/images/mtb_multiqc_report.html)
+
+[FastQC docs](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)
+[MultiQC docs](https://multiqc.info/docs/)
+
+
+# Processing Reads 
+
+When logging into server and using BioTradis or Transit (installed as python packages)
+```{bash}
+module load python/v3
+module load R
+```
+
+## Using TPP
+
+[Transit/tpp docs](https://transit.readthedocs.io/en/latest/transit_running.html)
+[tpp code github](https://github.com/mad-lab/transit/blob/master/src/pytpp/tpp_tools.py)
+
+### Run TPP on DeJesus data
+
+This data is paired-end, (but as we can only process Mbovis as single-end), we will run both paired-end and single-end tpp. Template counts are de-duplicated to eliminate PCR amplification jackpots, but this requires using unique barcodes and genomic end of R2.
+
+```{bash}
+tpp --help
+```
+
+parameters (default):
+used Himar1 transposon, Sassetti protocol
+
+for paired-end, single sample:
+```{bash tpp_single}
+tpp -bwa /s/software/bwa/bwa/bwa -ref $my_path/refseqs/Mtb/Mtb_H37Rv.fasta -reads1 $my_path/ncbi/files/dejesus/SRR4113428_1.fastq -reads2 $my_path/ncbi/files/dejesus/SRR4113428_2.fastq -output $my_path/dejesus_mtb/tpp_results/SRR4113428
+```
+
+
+for single-end, single sample:
+```{bash tpp_paired}
+tpp -bwa /s/software/bwa/bwa/bwa -ref $my_path/refseqs/Mtb/Mtb_H37Rv.fasta -reads1 $my_path/ncbi/files/dejesus/SRR4113427_1.fastq -output dejesus-Mtb-SRR4113427_singleread
+```
+
+script to iterate with single-end processing:
+```{bash iterate_tpp}
+#!/bin/bash
+# module load python/v3
+# usage: nohup bash $my_path/scripts/mtb_single_tpp.sh >& mtb_single.out &
+# run from: /d/in16/u/sj003/dejesus_mtb/data/ 
+
+
+FILES=*_1.fastq
+for file in $FILES
+
+do
+        filename=$(basename "$file")
+        filename="${filename%.*}"
+
+        echo "File on the loop:         ${file}"
+        
+        tpp -bwa /s/software/bwa/bwa/bwa -ref /d/in16/u/sj003/refseqs/Mtb/Mtb_H37Rv.fasta -reads1 ${file} -output /d/in16/u/sj003/dejesus_mtb/tpp_results/${filename}
+
+
+done 
+```
+
+to iterate through all 14 samples, run from: $my_path/dejesus_mtb/data
+
+```{bash}
+nohup bash $my_path/scripts/dejesus_iterate_tpp.sh >& dejesus_iterate_tpp.out &
+```
+
+(script, input directory \*if needed*\, saving output that prints to standard out)
+
+
+```{bash}
+#!/bin/bash
+# usage: from inside dejesus_mtb/data directory
+# bash $my_path/scripts/dejesus_iterate_tpp.sh
+
+for i in $(ls *.fastq | rev | cut -c 9- | rev | uniq)
+do
+
+        echo "File on the loop:         $i"
+        echo "Read 1:                   $1${i}_1.fastq"
+        echo "Read 2:                   $1${i}_2.fastq"
+
+        tpp -bwa /s/software/bwa/bwa/bwa -ref /d/in16/u/sj003/refseqs/Mtb/Mtb_H37Rv.fasta -reads1 $1${i}_1.fastq -reads2 $1${i}_2.fastq -output /d/in16/u/sj003/dejesus_mtb/tpp_results/paired_end/${i}
+
+
+done
+
+
+```
+
+some libraries have error before mapping (28, 30):
+
+```
+[tn_preprocess] prefix sequence: ACTTATCAGCCAACCTGTTA
+[tn_preprocess] Looking for start of Tn prefix within P,Q = [0,20]
+[tn_preprocess] Error: Input files did not contain any reads matching prefix sequence with 1 mismatches
+```
+
+were these trimmed off before uploading to sra?
+should we do this with 2 mismatches?
+
+checking fastq files to see if they have prefix seq:
+```{bash}
+grep -n 'ACTTATCAGCCAACCTGTTA' $my_path/dejesus_mtb/data/SRR4113430_1.fastq | wc -l
+```
+
+28: 1
+30: 24
+
+these don't seem to have prefix seq but still have .sam file as bwa started (no tn_stats.txt file)?
+34: 4 
+38: 4
+39: 8
+40: 1
+
+
+```
+[tn_preprocess] Error: BWA was unable to map any reads to the genome.
+```
+
+try 30 again with 2 mismatches allowed
+
+```{bash}
+tpp -bwa /s/software/bwa/bwa/bwa -ref $my_path/refseqs/Mtb/Mtb_H37Rv.fasta -reads1 $my_path/dejesus_mtb/data/SRR4113430_1.fastq -reads2 $my_path/dejesus_mtb/data/SRR4113430_2.fastq -output $my_path/dejesus_mtb/tpp_results/paired_end/SRR4113430 -mismatches 2
+```
+
+Doesn't work any better
+```
+Error: Input files did not contain any reads matching prefix sequence with 2 mismatches
+```
+
+need to find out whether these were uploaded after trimming, or something else going on?
+These are libraries 2, 12, 4, 8, 9 10
+
+14/06/20
+After email correspondence w/ T. Ioerger, informed that R1 and R2 have been switched in NCBI. Checked this for all 6 libraries with grep of tranposon tag which is present in 'R2' reads. Switched names (_2 to _1 and _1 to _22) and ran paired-end tpp again (with slightly altered bash script using list of altered libraries, seq_list.txt).
+
+```{bash}
+nohup bash $my_path/scripts/dejesus_iterate_tpp.sh seq_list.txt >& dejesus_iterate_tpp.out &
+```
+
+
+```{bash}
+#!/bin/bash
+
+input=$1
+while IFS= read -r line
+#for i in $(ls *.fastq | rev | cut -c 9- | rev | uniq)
+
+do
+	filename=$(basename "$line")
+	filename="${filename%.*}"
+
+	echo "File on the loop:		$line"
+	echo "Read 1:			${filename}_1.fastq"
+	echo "Read 2:			${line}_22.fastq"
+
+	tpp -bwa /s/software/bwa/bwa/bwa -ref /d/in16/u/sj003/refseqs/Mtb/Mtb_H37Rv.fasta -reads1 ${line}_1.fastq -reads2 ${line}_22.fastq -output /d/in16/u/sj003/dejesus_mtb/tpp_results/paired_end/${line}
+
+
+done <"$input"
+
+```
+
+
+
+
+
+### Run tpp on mbovis libraries (3)
+
+
+```{bash}
+#!/bin/bash
+
+# usage: bash mbovis_iterate_tpp.sh list_of_files.txt
+
+input=$1
+while IFS= read -r line
+
+do
+	filename=$(basename "$line")
+	extension="${filename##*.}"
+	filename="${filename%.*}"
+
+	echo "file on the loop:		$line"
+
+	tpp -bwa /s/software/bwa/bwa/bwa -ref /d/in16/u/sj003/refseqs/Mbovis_AF2122_97.fasta -reads1 $line -output /d/in16/u/sj003/mbovis/tpp_results/${filename}_tpp
+
+	echo "ouput:                    ${filename}_tpp"
+
+done <"$input"
+```
+
+did run in paired-end mode, but there were no barcodes found
+(data is definitely not bar-coded)
+
+**How important is using both reads/barcode deduplication?**
+What is typical read/template ratio in dejesus data (for those that mapped)?
+27: 4.43
+29, 31, 32, 33, 35, 36, 37: 1.12-1.76 range
+
+Could de-duplicate, potentially, using paired end reads with samtools markdup?
+
+[samtools markdup](http://www.htslib.org/doc/samtools-markdup.html)
+
+do we want to run this with custom primer (transposon sequence)?
+ours is: tag=GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA, but it says not to put in whole thing, just beginning
+Probably not necessary, as tpp has default sequences for himar1
+this is sequence they use: ACTTATCAGCCAACCTGTTA (just shorter version?). Just needs to start between base 0 and 20.
+
+list of files for each sample after tpp:
+```
+B_S1_L001_R1_001_tpp.counts
+B_S1_L001_R1_001_tpp.reads1
+B_S1_L001_R1_001_tpp.sam
+B_S1_L001_R1_001_tpp.tn_stats
+B_S1_L001_R1_001_tpp.trimmed1
+B_S1_L001_R1_001_tpp.trimmed1_failed_trim
+B_S1_L001_R1_001_tpp.wig
+```
+
+renamed all files with bash script "rename_files.sh"
+
+```{bash}
+#!/bin/bash
+
+FILES=*_tpp.*
+
+for file in $FILES
+
+do
+	filename=${file:0:1} 
+	extension="${file##*.}"
+
+	echo "${file}"
+	echo "${filename}"
+	echo "${extension}"
+
+	mv ${file} ${filename}_R1.$extension	
+
+
+done
+```
+
+
+.tn_stats gives all read counts, mapped reads, TA sites hit, insertion density, NZ_mean, etc (not max read count and skewness)
+
+```
+# transposon type: Himar1
+# protocol type: Sassetti
+# bwa flags: 
+# read1: B_S1_L001_R1_001.fastq
+# read2: 
+# ref_genome: /d/in16/u/sj003/refseqs/Mbovis_AF2122_97.fasta
+# replicon_ids: 
+# total_reads (or read pairs): 1044485
+# trimmed_reads (reads with valid Tn prefix, and insert size>20bp): 979489
+# reads1_mapped: 799285
+# reads2_mapped: 0
+# mapped_reads (both R1 and R2 map into genome, and R2 has a proper barcode): 799285 
+# read_count (TA sites only, for Himar1): 613959
+# template_count: 613959
+# template_ratio (reads per template): 1.00
+# TA_sites: 73536
+# TAs_hit: 15478
+# density: 0.210
+# max_count (among templates): 2548
+# max_site (coordinate): 1806084
+# NZ_mean (among templates): 39.7
+# FR_corr (Fwd templates vs. Rev templates): 0.818
+# BC_corr (reads vs. templates, summed over both strands): 1.000
+# primer_matches: 25509 reads (2.4%) contain CTAGAGGGCCCAATTCGCCCTATAGTGAGT (Himar1)
+# vector_matches: 24283 reads (2.3%) contain CTAGACCGTCCAGTCTGGCAGGCCGGAAAC (phiMycoMarT7)
+# adapter_matches: 352358 reads (33.7%) contain GATCGGAAGAGCACACGTCTGAACTCCAGTCAC (Illumina/TruSeq index)
+# misprimed_reads: 19641 reads (1.9%) contain Himar1 prefix but don't end in TGTTA
+# read_length: 151 bp
+# mean_R1_genomic_length: 115.9 bp
+```
+
+create stats.txt file for multiqc: 
+```{bash}
+bash $my_path/scripts/iterate_samstats.sh
+```
+
+```{bash iterate_samstats}
+#!/bin/bash
+
+FILES=*.sam
+for file in $FILES
+
+do
+        filename=$(basename "$file")
+        filename="${filename%.*}"
+
+        echo "File on the loop:         $filename"
+
+        #call samtools stats
+        /s/software/samtools/v1.10/bin/samtools stats ${file} > ${filename}.stats.txt
+
+        echo -e "########################\n\n"
+done
+
+
+# Run MultiQC
+echo "Running MultiQC..."
+/s/software/anaconda/python3/bin/multiqc -f .
+                                               
+```
+
+[MultiQC Report TPP mbovis](images/mbovis_tpp_multiqc_report.html)
+
+maybe change yaml of multiqc to recognise tn_stats files to save this step?
+
+.wig files are used for analysis (what are these exactly? seems like nucleotide number and number of hits?)
+
+
+can change sorted .bam to .wig with samtools:
+
+```{bash}
+samtools mpileup -BQ0 run.sorted.bam | perl -pe '($c, $start, undef, $depth) = split;if ($c ne $lastC || $start != $lastStart+1) {print "fixedStep chrom=$c start=$start step=1 span=1\n";}$_ = $depth."\n";($lastC, $lastStart) = ($c, $start);' | gzip -c > run.wig.gz
+
+```
+
+https://www.ecseq.com/support/ngs-snippets/how-to-get-a-coverage-graph-in-wig-file-format-directly-from-an-alignment-bam
+
+http://www.htslib.org/doc/samtools-mpileup.html
+
+
+
+**establish quality of tpp data with transit tnseq_stats:**
+
+```{bash tnseq_stats}
+#!/bin/bash
+
+# establish quality of tpp data with transit
+# iterate_tnseq_stats.sh from inside file directory
+
+FILES=*.wig
+
+for file in $FILES
+do
+
+  filename=$(basename "$file")
+  filename="${filename%.*}"
+
+  echo "File on the loop: 	    $filename"
+  echo  "File on the loop:      ${file}"
+
+  transit tnseq_stats ${file} -o ${filename}.dat
+  
+  echo -e "#####################################\n\n"
+  
+done
+```
+
+
+generates .dat file for each .wig file (these are in .tn-stats files as well)
+
+
+
+```
+dejesus-Mtb-SRR4113427.dat
+dataset density mean_ct NZmean  NZmedian        max_ct  total_cts       skewness        kurtosis        pickands_tail_index
+SRR4113427.wig      0.633   12.2    19.2    11      644.0   906579  4.0     33.7    0.075
+```
+
+From Ioerger, Transit docs:
+
+>While there are not rigorous criteria for defining “bad” datasets, rules of thumb I use for “good” datasets are: density>30% (ideally >50%) and NZmean>10 (ideally >50). In addition, I look at MaxReadCount and Skewness as indicators. Typically, MaxReadCount will be in the range of a few thousand to tens-of-thousands. If you see individual sites with counts in the range of 10^5^-10^6^, it might mean you have some positive selection at a site (e.g. biological, or due to PCR jackpotting), and this can have the effect of reducing counts and influencing the distribution at all the other sites. If MaxReadCount<100, that is also probably problematic (either not enough reads, or possibly skewing). Also, skewness>30 often (but not always) signals a problem. Kurtosis doesn’t seem to be very meaningful.
+
+
+to analyse the files together, will need a comma-separated list:
+
+```{python}
+#!/usr/bin python3
+# comma_list.py
+# make comma separated list of files from directory
+
+import os
+os.chdir(".")
+with open ('wig_list.txt', 'w') as f:
+    file_list = []
+    for root, dirs, files in os.walk("."):
+        for filename in files:
+            if filename.endswith('.wig'):
+                file_list.append(filename)
+    file_string = ','.join(file_list)
+    f.write(file_string)
+f.close()
+```
+
+then make combined wig file:
+
+```{bash}
+python3 src/transit.py export combined_wig <comma-separated .wig files> <annotation .prot_table> <output file>
+```
+
+this doesn't seem to work with list of files instead of actual files:
+
+```{bash}
+transit export combined_wig wig_list.txt $my_path/refseqs/Mtb/mtbH37Rv.prot_table mtb_SE_combined.wig
+```
+
+just copy the string from the .txt file and do again. But do I want to combine the Dejesus datasets into combined wig? They are actually different libraries? Can just list all of them and indicate avg or sum read counts when doing hmm analysis. Also can normalise with comma separated list.
+
+
+
+# Data Analysis
+
+**TRANSIT**
+
+[Transit docs](https://transit.readthedocs.io/en/latest/transit_running.html)
+
+**This is good resource for command-line examples:**
+[TRANSIT command-line examples](https://orca1.tamu.edu/essentiality/transit/)
+
+Create a prot_table:
+
+have to generate prot_table from .gff file, or use Mtb prot_table
+```{bash}
+transit convert gff_to_prot_table ~/git/mtb_modules/ref_seqs/MtbH37RvNC_000962.3.gff mtbH37Rv.prot_table
+
+```
+
+
+what is required by prot_table:
+
+gene function description
+
+start coordinate
+
+end coordinate
+
+strand
+
+length of protein product (in amino acids)
+
+don’t care
+
+don’t care
+
+gene name (like “dnaA”)
+
+ORF id (like Rv0001)
+
+
+**Create prot_table from mbovis.gff for Transit**
+
+to run Dong's R script in command line:
+```{bash}
+R CMD BATCH $my_path/scripts/annotate_GFF.R
+```
+
+when I run Dong's annotate_gff script get error
+
+```
+Error in 1:(grep("##FASTA", GFF[, 1]) - 1) : argument of length 0
+Calls: [ -> [.data.frame
+Execution halted
+```
+
+just commented out that line and all else seems to work (maybe it was relevant for original annotation file?). however, need a bit more info for prot_table: length of amino acid, product, gene name (does Dong use ORF id for gene name?). so this requires parsing descr note for aa len and orf name
+
+wrote R script: gff_parse.R
+
+```{r gff_parse.R}
+
+## try http:// if https:// URLs are not supported
+#source("https://bioconductor.org/biocLite.R")
+##biocLite("rtracklayer") *this is deprecated use biocmanager instead
+
+#BiocManager::install("rtracklayer")
+
+# for help docs
+browseVignettes("rtracklayer")
+
+library("rtracklayer")
+library(GenomicRanges)
+
+bovisTrack <- import("LT708304_updated_aug19.gff")
+
+genome(bovisTrack)
+#LT708304.1 
+#       NA 
+
+
+head(seqnames(bovisTrack))
+head(start(bovisTrack))
+head(strand(bovisTrack))
+head(width(bovisTrack))
+
+# look at first 20 targets
+first20 <- bovisTrack[1:20]
+
+# this give org of data and if you click on far right in viewer, gives commands
+# for retrieving this column
+View(first20)
+
+first20@ranges@start
+#end
+first20@ranges@width
+first20@strand
+# this has gene function, gene name, aa len and ORF id
+first20[6]@elementMetadata@listData[["note"]]
+first20@elementMetadata@listData[["product"]]
+first20@elementMetadata@listData[["gene"]]
+
+
+bovisTrack@elementMetadata@listData[["product"]]
+
+# do we need to limit to type 'CDS' ? no description for type 'gene' and same coordinates?
+first20@elementMetadata@listData[["type"]]
+
+# use only relevant columns in dataframe (keep locus tag b/c 'gene' features don't have note)
+bovis_df<-data.frame(descr = elementMetadata(bovisTrack)[,c("gene", "type", "note", "product", "locus_tag")], 
+           start = start(bovisTrack), end = end(bovisTrack), strand = as.factor(strand(bovisTrack)))
+View(bovis_df)
+
+# if we want only CDS features:
+cds<-bovis_df[bovis_df$descr.type == 'CDS',]
+View(cds)
+
+# parse mbovis_df and put in new dataframe "prot_table"
+
+prot_table<-data.frame(matrix(NA,ncol=9,nrow=nrow(bovis_df)), stringsAsFactors = FALSE)
+
+colnames(prot_table)<-c("PRODUCT","START", "END", "STRAND", "AA_LEN", "TYPE", "GAP", "NAME", "ORF_ID")
+
+for (i in 1:nrow(bovis_df)){
+#for (i in 1949:1950){
+  # product, gene name, ORF id and aa len must be parsed from column 9 ()
+  orf<-''
+  gene_name<-''
+  aa_len<-''
+  if (is.na(bovis_df$descr.note[i])){
+    note<-''
+  }
+  # if tRNA
+  else if (bovis_df$descr.type[i]=="tRNA"){
+    note<-unlist(strsplit(bovis_df[i,3],split = ","))
+    orf<-note[1]
+    gene_name <- note[1]
+    #aa_len <- substr(note[3], 6, nchar(note[3]))
+  }
+  # if repeat region
+  else if (bovis_df$descr.type[i]=="repeat_region"){
+    note<-unlist(strsplit(bovis_df[i,3],split = ","))
+    orf<-note[1]
+    gene_name <- note[4]
+  }
+  else {
+    note<-unlist(strsplit(bovis_df[i,3],split = ","))
+    orf<-note[1]
+    gene_name<- note[2]
+    len<- substr(note[4], 7, nchar(note[4]))
+    # get only integers from len string:
+    x<- gregexpr("[0-9]+", len)
+    aa_len <- as.numeric(unlist(regmatches(len, x)))
+    #aa_len<- data[grep("[0-9]+", len),]
+    }
+  # product 
+  if (!is.na(bovis_df$descr.product)[i]){
+    prot_table$PRODUCT[i]<-bovis_df[i,4]
+  }
+  # start and end
+  # make sure start and end in right order (could be switched?)
+  if (bovis_df[i,7]<bovis_df[i,6]){
+    prot_table$START[i]<-bovis_df[i,7]
+    prot_table$END[i]<-bovis_df[i,6]
+  } else {
+    prot_table$START[i]<-bovis_df[i,6]
+    prot_table$END[i]<-bovis_df[i,7]
+  }
+  
+  # strand
+  prot_table$STRAND[i]<-as.character(bovis_df$strand[i])
+
+  # type
+  if (!is.na(bovis_df$descr.type)[i]){
+    prot_table$TYPE[i]<-as.character(bovis_df$descr.type[i])
+  }
+  # GAP
+  prot_table$GAP[i]<-"-"
+  
+  # enter cells in dataframe if note is present:
+  if (length(note)>0){
+    # if type = Repeat, no aa len (nt length), in these is inputing '37' for aa_len (from H37Rv?)
+    # aa_length
+    if (length(aa_len)>0){
+      prot_table$AA_LEN[i]<-aa_len
+    }
+    # gene name
+    if (length(gene_name)>0){
+      prot_table$NAME[i]<-gene_name
+    }
+    # orf
+    if (length(orf)>0){
+      prot_table$ORF_ID[i]<-orf
+    }
+  }
+  # gene name if no note:
+  else if (length(bovis_df$descr.gene[i])>0){
+    prot_table$NAME[i]<-bovis_df$descr.gene[i]
+  }
+  # ORF id if no note (from locus-id)
+  else {
+    prot_table$ORF_ID[i]<-substr(bovis_df$descr.locus_tag[i],8, nchar(bovis_df$descr.locus_tag[i]))
+  }
+}
+View(prot_table)
+
+write.table(prot_table,"mbovis.prot_table",sep="\t", col.names = F, row.names = F, quote = F)
+
+```
+
+transferred script and prot_table file to server. not sure if this will work better than the one I assembled with their function--look pretty much the same, but the one they make won't work (the one for mtb appear to only have cds entries where product listed).
+
+New prot_table for mbovis worked for export and normalise functions.
+
+normalise individual datasets:
+
+```{bash}
+transit normalize infile.wig outfile_TTR.wig -n TTR
+```
+
+```{bash}
+#!/bin/bash
+
+# iterate transit normalisation on files in directory
+
+FILES=*.wig
+
+for file in $FILES
+
+do
+  # are both steps necessary? can't I just use one step: "${file%.*}"?
+	filename=$(basename "$file")    
+	filename="${filename%.*}"
+
+	echo "File on the loop:		${file}"	
+
+	transit normalize ${file} ${filename}_TTR.wig -n TTR
+
+	echo "normalised file: 		${filename}_TTR.wig"
+
+done
+```
+
+or do i want to do all three reads together? seems more the point, but need prot table first? I'm confused at why you can normalise with and without prot table? (see below for update)
+
+```{bash}
+python transit.py norm glycerol_H37Rv_rep1.wig,glycerol_H37Rv_rep2.wig H37Rv.prot_table glycerol_TTR.txt -n TTR
+```
+
+https://transit.readthedocs.io/en/latest/transit_console_cheatsheet.html
+
+can normalise to a 'combined .wig format' which is what I think we want to do with B, C and G 'sub-libraries'?  (but this is for different methods/labs?)
+
+-no I think we just want to add -mean to transit hmm tool to avg the read counts of the replicates (or -Sum to sum them)
+
+TTR=trimmed total reads
+
+>"Trimmed Total Reads (TTR), normalized by the total read-counts (like totreads), but trims top and bottom 5% of read-counts. This is the recommended normalization method for most cases as it has the beneffit of normalizing for difference in saturation in the context of resampling." (transit docs)
+
+21/6/20
+as per conversation with Sharon, B,C and G are sub-libraries (i.e. different cultured samples of SAME library) vs three libraries. Therefore, I'm thinking we need to create combined dataset with transit 'export' tool to make a 'combined wig file' for analysis. Can normalize together, using '-n TTR' (above), or use '-n nonnorm' to use raw reads. Need prot_table for this. Also, can normalise individual datasets, but don't see point in this.
+
+```{bash}
+transit export combined_wig B_R1.wig,D_R1.wig,G_R1.wig $my_path/refseqs/mbovis/mbovis.prot_table bovis_combined_nonorm.wig -n nonorm
+
+transit export combined_wig B_R1.wig,D_R1.wig,G_R1.wig $my_path/refseqs/mbovis/mbovis.prot_table bovis_combined_TTR.wig -n TTR
+
+```
+
+this can be used to export .wig to format for igv reader
+
+```{bash}
+transit export igv <file> <prot_table> <output file>
+
+transit export igv B_R1.wig $my_path/refseqs/mbovis/mbovis.prot_table B_R1_igv.wig
+```
+
+these still aren't readable on igv, disappointingly. 
+
+
+```
+file "/s/software/anaconda/python3/lib/python3.7/site-packages/pytransit/tnseq_tools.py", line 1218, in get_pos_hash_pt
+    start = int(tmp[1])
+ValueError: invalid literal for int() with base 10: 'START'
+```
+
+I think this is because I have column names in prot_table. edited parse.gff script--worked! 
+
+(The one converted from Dong's .gff using transit gff_to_prot_table tool doesn't work)
+
+```
+ValueError: invalid literal for int() with base 10: '+'
+```
+
+
+**This is good resource for command-line examples:**
+[TRANSIT command-line examples](https://orca1.tamu.edu/essentiality/transit/)
+
+
+Run tnseq_stats on combined wig files to compare:
+
+```{bash}
+transit tnseq_stats bovis_combined_nonorm.wig -o bovis_combined_nonorm_stats.dat
+transit tnseq_stats bovis_combined_TTR.wig -o bovis_combined_TTR_stats.dat
+```
+
+| dataset | density | mean_ct | NZmean  | NZmedian | max_ct  | total_cts | skewness | kurtosis | pickands_tail_index |
+|---------|---------|---------|---------|----------|---------|-----------|----------|----------|---------------------|
+| bovis_combined_nonorm.wig | 0.210 | 8.3 | 39.7 | 13 | 2548.0 | 613959 | 8.4 | 127.3 | 0.150 |
+| bovis_combined_TTR.wig | 0.210 | 150.3 | 714.1 | 234 | 45869.3 | 11052449 | 8.4 | 127.3 | 0.150 |
+
+why are mean_ct, NZmean, max_ct, and total_cts so different with no normalisation?
+
+NZmean is avg read count for non-zero TA sites
+
+max count is max number of counts for any one TA site?
+
+Is total count number of ta sites hit? I think this should be closer to 50-60,000 as B had 15,478, G:26,350, and D: 13,298. How does it go to 11 M with normalisation? 
+
+I think total counts are lower than raw total because of trimming at top end.
+
+so by trimming and normalising by total counts, NZ mean goes up? non-norm NZmean is closer to what it was for individual datasets. See what code is actually doing to data.
+
+normalisation factors for combined wig:
+
+```
+#Converted to CombinedWig with TRANSIT.
+#normalization method: TTR
+#Normalization Factors: 18.002081075528906 14.800682819029374 16.93937590283477
+```
+
+from Irilenia:
+I think this is because the original data is multiplied by some factor (the normalisation factor) which is not necessarily less than 1. Hence the numbers can come out bigger than before. I'm not sure exactly how these factors are calculated but it's done here:
+
+factors[j] = float(target)/(thetaEst(data[j]) * muEst(data[j]))
+
+(thetaEst is observed insertion density/ muEst is estimated trimmed mean)
+
+It looks like the tnseq_stats for the non-normalised combined wig is using just the data from the first sample (first file entered in command) to calculate the NZ mean, total reads, max_ct, etc. In TTR normalised, summing samples, etc?
+
+Made a parser script in python to parse the stats from .dat and tnseq_stats files, generates, 'combi_stats.csv'.
+
+```{r}
+tn_stats_df<-read.csv(here("Output/combi_stats.csv"))
+tn_stats_df
+```
+
+Look at distribution of reads in each sample. Skewed samples curve away from line. plots with 'heavy tails' that curve away in opposite extremes have more extreme values than expected by distribution.
+
+[qqplots](https://library.virginia.edu/data/articles/understanding-q-q-plots#:~:text=A%20QQ%20plot%20is%20a,truly%20come%20from%20normal%20distributions.)
+
+```{r bovis_distributions}
+library(tidyverse)
+library(purrr)
+library(ggplot2)
+library(dplyr)
+library(here)
+
+# sample name, condition, experiment, ta_site, read_count
+data_path = here('in_vitro_data/bovis_hiseq/tpp')
+#wig_files <- dir(data_path, pattern="*.wig$")
+wig_files = list.files(path = data_path, pattern = ".wig$", full.names = FALSE)
+
+df1 <- tibble(sample=wig_files) %>%
+  mutate(file_contents = map(wig_files,         
+           ~ read_delim(file.path(data_path, .), skip=1, delim=" ", show_col_types = F))
+        )  
+colnames(unnest(df1, cols=2))
+# rename with sample name instead of filename (have to do this for specific samples) maybe rename in directory first
+df1[[1]]<-sub("_hiseq_tpp", "", df1[[1]])
+df1[[1]]<-sub(".wig", "", df1[[1]])
+
+# all unnested
+bovis_df1 <- unnest(df1, cols=2)
+#change column names
+bovis_df1 <- rename(bovis_df1, ta_coord = variableStep, 
+       reads = `chrom=Mbovis_AF2122_97`)
+
+saveRDS(bovis_df1, here("R_data/bovis_invitro_insertions.RData"))
+
+nz_sites <- bovis_df1 %>% filter(reads != 0)
+
+#histograms for each
+samples <- unique(nz_sites$sample)
+for (i in 1:3){
+  my_sample <- samples[i]
+  nz_sample <- nz_sites %>% filter(sample=={my_sample}) %>% select(ta_coord, reads)
+  #truncate top 1% of reads
+  nz_trunc <- nz_sample %>% mutate(rank = ntile(reads, 100)) %>% filter(rank != 100)
+
+pl <- ggplot(nz_sample, aes(x=reads)) +
+    geom_histogram(bins=1000) +
+    xlim(1,2000) +
+    ylim(0, 1000) +
+    ggtitle(paste(my_sample, " distribution of non-zero reads"))
+  file <- paste("images/", my_sample, "_nz_distribution.pdf", sep="")
+  ggsave(here(file), pl)
+  png(here(paste("images/", my_sample, "_qq_plot.png", sep="")))
+  qqplot(y= nz_trunc$reads,
+         x=qgeom(ppoints(length(nz_trunc$reads)), 
+                 prob= 1/(mean(nz_trunc$reads))),
+         xlim = c(0, max(
+           qgeom(ppoints(length(nz_trunc$reads)), 
+               prob= 1/(mean(nz_trunc$reads))),
+           nz_trunc$reads )),
+         xlab = "Data Quantiles", 
+         ylab = "Theoretical Quantiles",
+         )
+  qqline(nz_trunc$reads, 
+        distribution = function(p) qgeom(p,
+                                    1/(mean(nz_trunc$reads))),
+       prob = c(0.25, 0.75), col = "red")
+  #abline(0,1, col="blue")
+  dev.off()
+}
+
+
+#with ggplot
+# data <- nz_sites %>% filter(sample=="bovis_19") %>% select(ta_coord, reads)
+# p <- ggplot(data, aes(sample=reads))
+# p + stat_qq(distribution = qgeom) +
+#   stat_qq_line(distribution = qgeom)
+
+#combined dist and qq plots (sum reads)
+sum_nz_reads <- bovis_df1 %>% group_by(ta_coord) %>% summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>% filter(reads > 0)
+#truncate top 1% of reads
+sum_nz_trunc <- sum_nz_reads %>% mutate(rank = ntile(reads, 100)) %>% filter(rank != 100)
+
+ggplot(sum_nz_reads, aes(x=reads)) +
+    geom_histogram(bins=1000) +
+    xlim(1,2000) +
+    ylim(0, 1000) +
+    ggtitle("distribution of summed non-zero reads")
+ggsave(here("images/summed_nz_distribution_bovis.png"))
+png(here("images/summed_bovis_nz_qq_plot.png"))
+qqplot(y= sum_nz_trunc$reads,
+        x=qgeom(ppoints(length(sum_nz_trunc$reads)), 
+                 prob= 1/(mean(sum_nz_trunc$reads))), 
+        xlab = "Data Quantiles", 
+        ylab = "Theoretical Quantiles",
+       xlim = c(0, max(
+           qgeom(ppoints(length(sum_nz_trunc$reads)), 
+               prob= 1/(mean(sum_nz_trunc$reads))),
+           sum_nz_trunc$reads )),
+       )
+qqline(sum_nz_trunc$reads, 
+      distribution = function(p) qgeom(p,                                   1/(mean(sum_nz_trunc$reads))),
+       prob = c(0.25, 0.75), col = "red")
+dev.off()
+
+```
+
+find cumulative insertion density when adding each sample
+
+```{r cumulative_saturation}
+library(tidyverse)
+library(here)
+
+bovis_df1 <- readRDS(here("R_data/bovis_invitro_insertions.RData"))
+nz_sites <- bovis_df1 %>% filter(reads != 0)
+
+bovis_19 <- nz_sites %>% filter(sample=="bovis_19") %>% select(ta_coord) %>% pull()
+bovis_20 <- nz_sites %>% filter(sample=="bovis_20") %>% select(ta_coord) %>% pull()
+bovis_21 <- nz_sites %>% filter(sample=="bovis_21") %>% select(ta_coord) %>% pull()
+
+#find total insertion density for each sample
+total_ta = 73536
+ins_den_19 <- length(bovis_19) / total_ta
+ins_den_20 <- length(bovis_20) / total_ta
+ins_den_21 <- length(bovis_21) / total_ta
+ins_den <- tibble(sample=c("bovis_19", "bovis_20", "bovis_21"), ins_density = c(ins_den_19, ins_den_20, ins_den_21))
+
+#barplot of insertion density
+library(RColorBrewer)
+ggplot(ins_den, aes(x=sample, y=ins_density, fill=sample)) +
+  geom_bar(stat="identity") +
+  scale_fill_brewer(palette = "Accent") +
+  ggtitle("Comparison of TA site saturation of Mbovis samples") +
+  ylab("saturation") +
+  theme(axis.title.x = element_blank(), axis.ticks.x = element_blank()) +
+  guides(fill="none")
+ggsave(here("images/Mbovis_insertion_barplot.png"))
+#union of total sites
+bovis_union <- union(union(bovis_19, bovis_20), bovis_21)
+#40482 total ta's hit
+length(bovis_union)/total_ta
+#55% total TA's hit in bovis
+
+#number of total reads with insertions in all reps/exp (union) vs number in common in all samples (intersect)
+int_ta <- intersect(intersect(bovis_19, bovis_20), bovis_21)
+#6925 in common
+length(int_ta)/ length(bovis_union)
+#17% in all
+
+#make df
+cumul_unique <- tibble(
+  dataset=c("bovis_19", "bovis_20", "bovis_21"),
+  len_tas = c(length(bovis_19), length(bovis_20), length(bovis_21)),
+  cum_tas = c(length(bovis_19), length(union(bovis_19, bovis_20)), length(union(union(bovis_19, bovis_20), bovis_21))),
+  cum_ins_den = c(length(bovis_19)/total_ta, length(union(bovis_19, bovis_20))/total_ta, length(union(union(bovis_19, bovis_20), bovis_21))/total_ta)
+  )
+
+#cumul density
+ggplot(cumul_unique, aes(x=dataset, y=len_tas, fill=dataset)) +
+  geom_bar(stat="identity") +
+  geom_line(aes(y=cum_tas), group=1) +
+  geom_point(aes(y=cum_tas), group=1) +
+  scale_fill_brewer(palette = "Accent") +
+  ggtitle("Comparison of TA site saturation of Mbovis samples") +
+  ylab("saturation") +
+  theme(axis.title.x = element_blank(), axis.ticks.x = element_blank()) +
+  guides(fill="none") +
+  theme(axis.title.y = element_text(size = 12)) +
+  theme(axis.text.x = element_text(size=10))
+ggsave(here("images/mbovis_cumul_density_barplot.png"))
+
+
+```
+
+
+```{bash}
+# transit with HMM:
+transit hmm $my_path/dejesus_mtb/tpp_results/dejesus-Mtb-SRR4113427.wig $my_path/refseqs/mtbH37Rv.prot_table dejesus-Mtb-SRR4113427.txt 
+```
+
+15 July 
+
+Used quality control on transit GUI to look at data. Actually, D may be sparsest, but has best behaved data. G is quite skewed.
+
+tried applying betageom to datasets, but of limited help. 
+
+From Transit docs:
+
+>Beta-Geometric Correction
+If you have a “bad” or poorly-behaving or “skewed” dataset (e.g. with mostly low counts, dominated by a few high counts), right now the only remedy you can try is applying the Beta-Geometric correction (BGC), which is a non-linear adjustment to the insertion counts in a wig file to make them more like an ideal Geometric distribution (DeJesus & Ioerger, 2016). (Note, all the other normalizations, like TTR, are linear adjustments, and so they can’t correct for skewing.)
+
+combined QC plots:
+
+![no normalisation](~/tn_seq/images/combined_QC_none.png)
+
+
+
+![TTR normalisation](~/tn_seq/images/combined_QC_TTR.png)
+
+![betageom normalisation](~/tn_seq/images/combined_QC_betageom.png)
+
+
+Individual QC plots:
+
+![Sample B with TTR](~/tn_seq/images/B_QC_TTR.png)
+
+![Sample D with TTR](~/tn_seq/images/D_QC_TTR.png)
+
+
+![Sample G with betageom](~/tn_seq/images/G_QC_betageom.png)
+
+I chose betageom with G because so skewed (similar to combined file)
+
+Ran transit gumbel:
+
+```{bash}
+nohup transit gumbel B_R1.wig,D_R1.wig,G_R1.wig $my_path/refseqs/mbovis/mbovis.prot_table $my_path/mbovis/transit/bovis_nonorm.txt -r Sum &>run_tradis_out &
+
+nohup transit gumbel B_R1_TTR.wig,D_R1_TTR.wig,G_R1_TTR.wig $my_path/refseqs/mbovis/mbovis.prot_table $my_path/mbovis/transit/bovis_TTR.txt -r Sum >& run_tradis_TTR_out &
+```
+
+-m can use default of read counts of 1, but can make higher to filter out low coverage
+
+Legend for calls: E=Essential U=Uncertain, NE=Non-Essential, S=too short
+
+some weird results--shows 9 insertions in a region (dnaN,  2052 to 3260) that has no reads acc to .wig files (with 35 TA sites in region) (Mb0002, dnaN).
+
+columns in .txt file: "ORF","Name", "Descr", "no ins in ORF", "total TA in ORF", "len max run non-ins", "nt span for max run non-ins", "zbar", "call"
+
+
+Maybe because prot_table has a mistake in first entry for whole genome? Need to edit prot_table and try again with transit. No real effect, just on first line. Made no difference really, to combined files, either--don't use these for processing, so not going to worry about it.
+
+
+*Check results with hmm*
+
+bovis_hmm_genes.txt shows call for each gene:
+
+
+```
+#ORF	gene	annotation	TAs	ES sites	GD sites	NE site GA sites	saturation	mean	call
+
+Mb0002	 dnaN	NA	35	0	0	35	0	0.2571	674.11	NE
+Mb0002	 dnaN	NA	35	0	0	35	0	0.2571	674.11	NE
+```
+
+Also records 35 TA sites, but considers NE: 0 ES sites, 0 GD sites, 35 NE sites
+
+key: ES=essential, GD=insertions cause growth-defect, NE=non-essential, GA=insertions confer growth-advantage, N/A=not analyzed (genes with 0 TA sites)
+
+bovis_hmm.txt shows for each TA site
+
+```
+# Mean:	1053.77
+# Median:	288.00
+# Normalization:	TTR
+# LOESS Correction:	False
+# pins (obs):	0.464779
+# pins (est):	0.559946
+# Run length (r):	6
+# State means:
+#    ES:   1.0101   GD:   8.5764   NE: 657.6422   GA: 3288.2112
+# Self-Transition Prob:
+#    ES: -1.2361e-17   GD: -1.2361e-17   NE: -1.2361e-17   GA: -1.2361e-17
+# State Emission Parameters (theta):
+#    ES: 0.9900   GD: 0.1166   NE: 0.0015   GA: 0.0003
+# State Distributions:#    ES: 13.64%   GD: 4.52%   NE: 79.88%   GA: 1.96%
+```
+
+```
+60	0	1.00e+00 	7.86e-20 	9.05e-22 	1.81e-22 	ES	-_( LT708304.1),-_( LT708304.1),Mb0059_( dnaB),Mb0001_( dnaA)
+72	0	1.00e+00 	9.26e-21 	1.39e-24 	5.56e-26 	ES	-_( LT708304.1),-_( LT708304.1),Mb0059_( dnaB),Mb0001_( dnaA)
+102	0	1.00e+00 	1.09e-21 	2.14e-27 	1.71e-29 	ES	-_( LT708304.1),-_( LT708304.1),Mb0059_( dnaB),Mb0001_( dnaA)
+188	0	1.00e+00 	1.28e-22 	3.28e-30 	5.24e-33 	ES	-_( LT708304.1),-_( LT708304.1),Mb0059_( dnaB),Mb0001_( dnaA)
+246	0	1.00e+00 	1.51e-23 	5.04e-33 	1.62e-36 	ES	-_( LT708304.1),-_( LT708304.1),Mb0059_( dnaB),Mb0001_( dnaA)
+333	0	1.00e+00 	1.78e-24 	7.77e-36 	5.71e-39 	ES	-_( LT708304.1),-_( LT708304.1),Mb0059_( dnaB),Mb0001_( dnaA)
+```
+
+From the paper (Dejesus, 2013):
+"The resulting state transition model affords a ‘smoothing’ of the read- count data, where, for example, TA sites with no insertions in non-essential regions (e.g. because they are absent from the library) are tolerated because neighboring sites have insertions. However, if a consecutive sequence of TA sites with no insertions is long enough, the most probable state sequence, as determined by the Viterbi algorithm switches locally to essential, providing a different labeling of that region."
+
+[Dejesus, 2013](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-14-303)
+
+**Using BioTradis**
+
+[Biotradis github page](https://github.com/sanger-pathogens/Bio-Tradis#usage)
+
+[biotradis tutorial](BioTraDISTutorial.pdf)
+
+https://www.biostars.org/p/15847/
+
+>Bam files can also have a companion file, called an index file. This file has the same name, suffixed with .bai. This file acts like an external table of contents, and allows programs to jump directly to specific parts of the bam file without reading through all of the sequences. Without the corresponding bam file, your bai file is useless, since it doesn't actually contain any sequence data. If you have a bam file without a corresponding index, you can generate one using "samtools index bamfile.bam"
+
+
+[BWA docs](http://bio-bwa.sourceforge.net/bwa.shtml)
+
+
+
+Dong made a pipeline doc outlining what he's done with mbovis data:
+
+
+#### TraDIS Pipeline
+
+Programs needed:
+
+Samtools
+bwa
+bio-tradis
+bamtools
+trimmomatic (if required to trim)
+
+** also need bedtools
+
+
+Need 4 files in addition to FASTQs:
+
+Reference fasta file
+Tradis_pipeline_make_BAMs.sh
+TraDIS_summary.R
+names.txt (text file with names of FASTQs in rows (without .fastq.gz))
+
+## Index reference fasta
+
+bwa index ref.fasta
+
+## Run shell script to remove tags and create aligned BAMs (need to specify tag sequence and reference file name
+
+tag=GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA ref=M.bovis_AF2122.fasta ./Tradis_pipeline_make_BAMs.sh
+
+## move into BAM folder and run R script
+
+cd ..._BAMs (... will be date and time)
+
+Rscript ../TraDIS_summary_Mbovis.R
+
+## to calculate essentialities
+
+TraDIS_summary_Mbovis-LT708304.1_gammaFit.R
+
+
+
+I have adjusted Tradis_pipeline_make_BAMs.sh script (original stored locally):
+
+```{bash}
+module load python/v3 samtools bedtools bwa
+```
+
+```{bash}
+#!/bin/bash
+# from Dong Xia's tradis pipeline
+
+# usage: bash tradis_pipeline_make_BAMS.sh
+
+ref=/d/in16/u/sj003/refseqs/Mbovis_AF2122_97.fasta
+tag=GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA
+
+
+# indexes database sequences in FASTA format
+bwa index ${ref}
+
+while read i;
+do
+#gunzip ${i}.fastq.gz
+# creates fastq file containing reads that match supplied tag
+filter_tradis_tags -f ${i}.fastq -t ${tag} -o ${i}.removed0mis.fastq
+# creates fastq file containing reads with supplied tag removed from seqs
+remove_tradis_tags -f ${i}.removed0mis.fastq -t ${tag} -o ${i}.removed.fastq
+
+# aln is old way: finds SA coordinates of input reads (what dong uses)
+ bwa aln ${ref} ${i}.removed.fastq > ${i}.removed.fastq.sai
+# aligns in SAM format
+bwa samse ${ref} ${i}.removed.fastq.sai ${i}.removed.fastq > ${i}.sam
+
+# bwa mem for 70bp-1Mbp query seqs with BWA-MEM algorithm using maximal exact matches and extending with SW algorithm (should have more reads) local alignment
+# this is what TPP (DeJesus) uses
+#bwa mem ${ref} ${i}.removed.fastq > ${i}.sam
+# file format conversion
+samtools view -bS ${i}.sam > ${i}.bam
+# sort alignments by leftmost coordinates
+samtools sort ${i}.bam > ${i}.sort.bam
+# index sorted bam file for fast random access (output is aln.bam)
+samtools index ${i}.sort.bam
+# remove redundant files
+rm ${i}.sam ${i}.bam ${i}.removed0mis.fastq ${i}.removed.fastq
+# rename unmapped reads, sort, convert to fastq format
+samtools view -b -f 4 ${i}.sort.bam > ${i}_unmapped.bam
+samtools sort ${i}_unmapped.bam > ${i}_unmappedsort.bam
+# use bedtools to convert bam files to fastq
+bamToFastq -i ${i}_unmappedsort.bam -fq ${i}_unmapped.fastq
+# rename mapped reads, sort, convert to fastq format
+samtools view -b -F 4 ${i}.sort.bam > ${i}_mapped.bam
+samtools sort ${i}_mapped.bam > ${i}_mappedsort.bam
+bamToFastq -i ${i}_mappedsort.bam -fq ${i}_mapped.fastq
+# remove redundant files
+rm ${i}_unmapped.bam ${i}_unmappedsort.bam ${i}_mapped.bam ${i}_mappedsort.bam
+done < names.txt
+
+mkdir $(date +"%Y_%m_%d")_BAMs; mv *.bam *.bai $_
+mkdir $(date +"%Y_%m_%d")_Mapped_read; mv *_mapped.fastq $_ 
+mkdir $(date +"%Y_%m_%d")_Unmapped_reads; mv *_unmapped.fastq $_
+
+```
+
+```{bash}
+nohup bash $my_path/my_scripts/tradis_pipeline_make_BAMS.sh ./ >& run_tradis_out &
+```
+
+I did this with both aln and mem. I got way better results with mem (not surprisingly, same % mapped as with tpp which uses mem algorithm).
+
+directories for mem results:
+
+```{bash}
+2020_06_03_mem_BAMs 
+2020_06_03_mem_Mapped_reads  
+2020_06_03_mem_Unmapped_reads
+```
+
+
+for multiqc, must generate samtools stats on .bam files (or .sam files in tpp) before running multiqc
+
+```{bash}
+$my_path/my_scripts/iterate_samstats.sh
+```
+
+MultiQC report for bwa aln (default params):
+
+![BWA_aln_mbovis MultiQC](images/bwa_aln_mbovis.png)
+
+[MultiQC report aln](images/aln_multiqc_report.html)
+
+MultiQc report for bwa mem (default params):
+
+![BWA_mem_mbovis MultiQC](images/bwa_mem_mbovis.png)
+
+[MultiQC report mem](images/multiqc_mem_report.html)
+
+23/06/20
+
+Run Dong's analysis on .sort.bam files to see how it is working. 
+Used TraDIS_summary_Mbovis-LT708304.1.R
+Created 'names.txt' in folder with .bams with all three sample names (no extension). Changed name of feature table to match new one created with Dong's annotation script (Annotate_GFF-locusAsName.R)
+
+Run in directory with files:
+
+```{bash}
+ R CMD BATCH $my_path/scripts/TraDIS_summary_Mbovis-LT708304.1.R
+```
+
+probably should have done 'nohup' because taking a long time!
+
+```{bash}
+nohup R CMD BATCH $my_path/scripts/TraDIS_summary_Mbovis-LT708304.1.R >& TraDIS_summary_Mbovis-LT708304.1.Rout &
+```
+
+also importing .bam and .bam.bai files to my local computer to run the script on Rstudio so I can see what is going on
+
+
+-creates summary.csv file for each sample with name and location of site and number of insertion reads
+
+>creates file: .tradis_gene_insert_sites.csv, containing locus tags, gene names, read counts and unique insertion sites per gene, among other useful bits of data
+
+'no. insertion sites' is number of insertion sites per gene/feature (length of 'insertion site' vector  or length of 'pos IS')
+
+'insertion index' = number of insertion sites/gene length
+
+(this normalises number of unique insertions for length of gene)
+
+'insertion site' : unique reads per insertion site per gene (list of number of reads per IS)
+
+contain read counts on each strand for every nucleotide position in the replicon. They can be opened as “user plots” in the Artemis genome browser, and will be used for further analysis. used to calculate: avg coverage, no. reads per insertion site, total no. insertion sites
+
+'No. reads per IS' is number of unique reads per insertion site per feature (long, pasted list of numbers of reads)
+
+```{r}
+for (k in 1:ncol(insertionsite)){
+  insertionsite[1,k]<-length(which(is.element(reads$pos,a[k])))
+  }
+summary_stats$`Av.Coverage`[i]<-median(as.numeric(insertionsite[1,]))
+```
+
+'avg coverage' = median of the number of reads at each insertion site per feature
+
+'total no. insertion sites' = sum of number of reads per insertion sites per feature
+
+![insertion plot B](~/tn_seq/images/B_S1_L001_R1_001_insertion.jpg)
+
+![insertion plot D](~/tn_seq/images/D_S2_L001_R1_001_insertion.jpg)
+
+![insertion plot G](~/tn_seq/images/G_S3_L001_R1_001_insertion.jpg)
+
+
+same columns, but 'DP>5' are same but only if 5 or more reads per insertion site. Why 5?
+Is this to eliminate small genes/features with few insertion sites, as not fully saturated library?
+
+-uses mean of samples to create insertion plot, taking mean of av index and av dp5 index
+
+![insertion index per gene](~/tn_seq/images/insertion_index.jpg)
+
+![average coverage per gene](~/tn_seq/images/av_coverage.jpg)
+
+
+essentially, only 'normalisation' occurring is to look at 'DP>5' counts only, where there are 5 or more reads per insertion site. Similar idea to TTR which is trimming top and bottom 5% of read counts?
+
+** Look at correlation of insertion sites between samples
+
+import .wig files from server and calculate correlation between datasets
+
+see script: correlation_bovis.R
+
+Need to use log10 of read counts as that transforms to a more normal distribution which is the assumption for Pearson correlation
+
+non_normal datasets:
+
+```{r}
+res <- cor(non_norm)
+round(res, 2)
+#     B    D    G
+#B 1.00 0.10 0.06
+#D 0.10 1.00 0.07
+#G 0.06 0.07 1.00
+```
+
+
+
+ttr normalised datasets:
+
+```{R}
+res_ttr <- cor(ttr_norm)
+round(res_ttr, 2)
+#     B    D    G
+#B 1.00 0.10 0.06
+#D 0.10 1.00 0.07
+#G 0.06 0.07 1.00
+```
+
+so looks like ttr doesn't affect correlation between datasets?
+
+Would we expect correlation between these sub-pools?
+
+It seems to me we shouldn't expect correlation of the positions of the reads among the three 'sub-libraries' given that, for example, B, has only 5,000 colonies plated, vs. D, which has 35,000. I don't know the number of individual mutants in the libraries, but I would imagine it is bigger than 5,000 if you had 300,000 colonies. So B really isn't representative of the entire library--we will have stochastic effects, as only a partial pool of mutants is selected. So I am not sure there is any point in evaluating separately. It seems to me that if you have 35,000 colonies in sub-library D, that should be enough to represent all the independent mutants in the library, according to Long, et al. But adding together should add to genes covered, or at least, to the coverage of certain genes. 
+
+I know this doesn't help with the lack of correlation between the technical replicates. Have we done correlation between this library and Mtb?
+ 
+Sharon says the number of unique TA sites hit (insertions) doesn't correlate to library size. It would seem that you should have fewer genes covered with a smaller library, but that isn't what we are seeing (library 'G' has best coverage, only 2 plates). This is more important than correlation at each position. 
+
+THis could be due to PCR jackpot sequences that throw off distribution 
+
+Used wig files generated by tpp to calculate statistics 'manually' for comparison to transit stats and Dong's stats:
+
+```{R find_insertion_density}
+
+tn_stats_df<-read.csv(here("data/bovis_combined_TTR.wig"), header=TRUE, sep = "\t", skip=6, row.names=NULL, col.names = c('position', 'B', 'D', 'G', 'gene'))
+View(tn_stats_df[1:50,])
+
+# df for sum of reads for each ta site
+comb_names<-c("position", "sum reads", "gene")
+combined_df<-as.data.frame(matrix(0, nrow = nrow(tn_stats_df), ncol = 3))
+combined_df[,1]<-tn_stats_df[,1]
+for (i in 1:nrow(combined_df)){
+  combined_df[i,2]<-sum(tn_stats_df[i,2:4])
+}
+combined_df[,3]<-tn_stats_df[,5]
+colnames(combined_df)<-comb_names
+View(combined_df[0:200,])
+
+# find raw number of ta sites inserted for TTR normalised (sum of reads is not 0)
+tot_count <- combined_df[,2]
+ins_count<-0
+for (i in 1:length(tot_count)){
+  if (tot_count[i] != 0.0){
+    ins_count <- ins_count + 1
+  }
+}
+ins_count
+# 34178
+length(tot_count)
+# 73536
+insertion_density <- ins_count/length(tot_count)
+insertion_density
+# 0.4647792
+
+# max read count
+max(tot_count)
+# 100024.5  (uses normalisation factor?)
+
+# mean of no insertions per gene
+mean(tot_count)
+# 489.7486
+
+
+#non zero mean (mean of read counts at all non-zero sites)
+# change all zeros to na
+is.na(tot_count) <- tot_count==0.0
+tot_count[1:100]
+mean(tot_count, na.rm=TRUE) 
+# 1053.723
+
+
+# do this again with non_normal
+
+tn_non_stats_df<-read.csv("bovis_combined_nonorm.wig", header=TRUE, sep = "\t", skip=6, row.names=NULL, col.names = c('position', 'B', 'D', 'G', 'gene'))
+View(tn_non_stats_df[1:20,])
+
+# df for sum of reads for each ta site
+comb_names<-c("position", "sum reads", "gene")
+combined_non_df<-as.data.frame(matrix(0, nrow = nrow(tn_non_stats_df), ncol = 3))
+combined_non_df[,1]<-tn_non_stats_df[,1]
+for (i in 1:nrow(combined_non_df)){
+  combined_non_df[i,2]<-sum(tn_non_stats_df[i,2:4])
+}
+combined_non_df[,3]<-tn_non_stats_df[,5]
+colnames(combined_non_df)<-comb_names
+View(combined_non_df[0:200,])
+
+# find raw number of ta sites inserted for TTR normalised (sum of reads is not 0)
+tot_non_count <- combined_non_df[,2]
+ins_non_count<-0
+for (i in 1:length(tot_non_count)){
+  if (tot_non_count[i] != 0.0){
+    ins_non_count <- ins_non_count + 1
+  }
+}
+
+length(tot_non_count)
+# 73535   (why is this one less than ttr?)
+# 72450 is what Sharon gets
+# 73536 is what I get counting naively
+
+ins_non_count
+# 34178  (exactly same as normalised with TTR?)
+# same number of sites inserted but number of counts different
+max(tot_non_count)
+# 5913
+
+mean(tot_non_count)
+# 29.54797
+
+#non zero mean 
+is.na(tot_non_count) <- tot_non_count==0.0
+mean(tot_non_count, na.rm=TRUE) 
+# 63.57335
+```
+
+# see how this process aligns with one of the dejesus libraries
+
+```{R}
+dejesus_40_df<-read.csv("SRR4113440_1.wig", sep = " ", skip=2, header=TRUE, row.names=NULL, col.names=c('position', 'count'))
+View(dejesus_40_df[1:50,])
+
+# find raw number of ta sites inserted for TTR normalised (sum of reads is not 0)
+tot_40 <- dejesus_40_df[,2]
+ins_count_40<-0
+for (i in 1:length(tot_40)){
+  if (tot_40[i] != 0.0){
+    ins_count_40 <- ins_count_40 + 1
+  }
+}
+
+length(tot_40)
+# 74603
+ins_count_40
+# 39247
+
+#insertion density
+id_40<-ins_count_40/length(tot_40)
+id_40
+# 0.526078
+
+max(tot_40)
+# 4121
+
+mean(tot_40)
+# 29.79875
+
+#non zero mean 
+is.na(tot_40) <- tot_40==0.0
+mean(tot_40, na.rm=TRUE) 
+# 56.64321
+```
+
+These results match the results from the tpp program (even non zero mean).
+
+I'm thinking difference in insertion densities between Dong and tpp must have to do with mapping? he doesn't tell me the parameters he uses for bwa, but default parameters aren't giving me the same number of insertions seen in excel results file.
+
+
+# noticed in biotradis docs, you can: 
+Generate insertion site plot for only reads with a mapping score >= 50
+Bio::Tradis::TradisPlot(mappedfile => 'mapped.bam', mapping_score => 50)->plot;
+
+where is mapping score?
+
+
+** attempt to create own coverage files from .bam files using bedtools
+
+Create Bed file for sorted bam files:
+```{bash}
+ bamToBed -i B_S1_L001_R1_001.sort.bam > $my_path/mbovis/bed_files/B_S1.bed
+ bamToBed -i D_S2_L001_R1_001.sort.bam > $my_path/mbovis/bed_files/D_S2.bed
+ bamToBed -i G_S3_L001_R1_001.sort.bam > $my_path/mbovis/bed_files/G_S3.bed
+```
+
+this may not be necessary, as Bedtools coverage has option -ibam which uses sorted bam files?
+
+```{bash}
+bedtools genomecov [OPTIONS] -i <bed/gff/vcf> -g <genome>
+```
+
+```{bash}
+genomeCoverageBed –i file.bed -bg –g my.genome > sample.cov
+```
+
+```{bash}
+bedtools genomecov -bga -ibam /d/in16/u/sj003/mbovis/bwa_mapped/2020_06_03_mem_BAMs/B_S1_L001_R1_001.sort.bam > /d/in16/u/sj003/mbovis/coverage/B1_S1.cov
+```
+
+Genome (-g) files are ignored when BAM input is provided.
+
+-d Report the depth at each genome position (with one-based coordinates).
+this gives read depth at literally every single nucleotide. I want every ta site.
+
+-bg		Report depth in BedGraph format. For details, see:
+			genome.ucsc.edu/goldenPath/help/bedgraph.html
+			
+-bga		Report depth in BedGraph format, as above (-bg).
+			However with this option, regions with zero 
+			coverage are also reported. This allows one to
+			quickly extract all regions of a genome with 0 
+			coverage by applying: "grep -w 0$" to the output.
+
+This only gives reads at genome feature coordinates, not every ta site
+
+[bedtools genome coverage](https://bedtools.readthedocs.io/en/latest/content/tools/genomecov.html)
+
+what about if i use a custom bedfile instead based on TA positions rather than gene coordinates? bedtools coverage compares query bed file a with file b. (can use multiple .bam files). 
+
+-d	Report the depth at each position in each A feature. Positions reported are one based. Each position and depth follow the complete A feature.
+One should use the “-d” option to create, for each interval in A, a detailed list of coverage at each of the positions across each A interval.
+The output will consist of a line for each one-based position in each A feature, followed by the coverage detected at that position.
+
+-s Calculating coverage by strand
+Use the “-s” option if one wants to only count coverage if features in A are on the same strand as the feature / window in A. This is especially useful for RNA-seq experiments.
+
+[bedtools coverage tool](https://bedtools.readthedocs.io/en/latest/content/tools/coverage.html)
+
+```{bash}
+
+bedtools coverage [OPTIONS] -a <FILE> \
+                             -b <FILE1, FILE2, ..., FILEN>
+
+```
+
+have to make query .bed file. 3 required columns: chromosome, start and end. for forward strand, if start is 2, end is 3. for reverse strand, if start is 2, end is 1. But for examples, start is lower number? so do I need to convert reverse to other way around where start is A? This looks better. Can I use this in Dong's script with bamparam to map coverage, or better to do myself with bedtools coverage? I think I need to make strand specific?
+
+ex seq: GTAATTATATACG
+forward TA's: 2-3,6-7,8-9,10-11
+reverse TA's: 5-4, 8-7, 10-9
+reverse AT's: 4-5, 7-8, 9-10
+
+LT708304  2 3 +
+LT708304  4 5 -
+LT708304  6 7 +
+LT708304  7 8 -
+LT708304  8 9 +
+LT708304  9 10 -
+LT708304  10  11  +
+
+
+
+can i make 'insert_site_plot' with biotradis?
+
+made a python script to count TA sites in fasta sequence. 
+This came up with same number of TA sites as TPP: 73536.
+Sharon reports 73450.
+'insertion_site_finder.py' 
+
+Can I use this instead of feature table to count reads? Do I need to have positions of both forward and reverse strands for mapping purposes? Generate (bedfile?) file with positions of the 5’ end of each TA site for each strand. Is this necessary? The wig files seemed to only have the forward positions listed--every TA is an AT on the other side, so it is the same site.
+
+GRRR! I discovered that I was using truncated features file when running dong's scripts. Re-ran annotation script (Annotate_GFF.R) and used new file (M_bovis_features.csv) with summary script.
+
+I want total insertions in genome--add up insertion sites per gene
+
+Just realised first item in summary.csv files is entire genome! Lists all insertions in genome, and other statistics. 
+
+B:  48040 = no. insertions
+    0.0110... = insertion index
+    3 = av. coverage
+    20597 = no. insertions with read # >5
+    0.004735 = insertion index DP>5
+    20 = av. covg DP > 5
+    
+D:  26038 = no. insertions
+    0.00598587922859907 = insertion index
+    3 = av. covg
+    11289 = no insertions with DP >5
+    0.00259522968782759 = insertion index DP>5
+    30 av. covg DP >5
+    
+G:  146517 = no. insertions
+    0.0336828123103406 = insertion index
+    2 = avg covg
+    32914 = no insertions with DP>5
+    0.00756660376872685 = insertion index DP >5
+    10 av covg DP > 5
+    
+G has a lot of insertions but at very low density (this was library of only two plates). D has best coverage, but low number of insertions.
+    
+    
+I am concerned that my feature file has duplicate positions, like the same genomic positions for ‘gene’ and ‘CDS’ for each feature. So I’ve just counted the number of insertion sites for ‘gene’ only and totalled those, and I get 216,600 insertions. That still seems way too high? I guess this is adding total number of insertions for each sample for each gene feature, so many of those insertions are duplicated by each dataset. I think I need to add up the number of unique positions after I combine the columns of actual insertion positions. Or maybe take from first line only?
+
+13 July
+
+Irilenia has discovered (using gene viewer) that the reverse reads are being recorded with position of 3' end rather than the 5' end position. Therefore, insertions in the same insertion site are recorded with unique positions corresponding to their sheared end. This may inflate number of unique insertions on reverse strand.
+
+there also seem to be a lot of duplicates (with same ta position and same genomic suffix). Even without paired end reads, should be able to use tool (Picard) to remove duplicates? I'm not sure this would work, however, as it uses 5' read position and so many map to same exact position but may be unique reads with different read length.
+
+To further confirm over-estimation in unique insertion counts in Dong's script:
+
+Looking at .csv from Sharon (BCD_bothBatch_TraDIS_summary)
+
+MB1985c	CDS	CONSERVED HYPOTHETICAL PROTEIN	2196042	2196233	192	18	0.09375	12.5	12	0.0625	18.5	2195926;2195927;2195933;2195953;2196003;2196013;2196033;2196045;2196051;2196053;2196056;2196096;2196119;2196121;2196131;2196171;2196174;2196182	1,84,2,18,14,32,1,203,1,8,4,11,14,9,19,19,48,4	492
+
+This has 18 insertions in gene length of 192. Every 10 nt? Hard to believe. Look at list of insertion sites:
+2195926;2195927;2195933;2195953;2196003;2196013;2196033;2196045;2196051;2196053;2196056;2196096;2196119;2196121;2196131;2196171;2196174;2196182
+
+I can't find TA sites at/near some of these insertion sites.
+
+The 47,881 unique mutants Sharon quotes from Dong (in slack message) relates to sum of unique insertion sites column in excel file which is missing chunk of genome? In 'BCD_bothBatch_TraDIS_summary' (a file emailed to Irilenia for visualisation help), number is 55,818. I'm not sure whether these represent all insertions, as do not show insertions in intergenic regions?
+
+
+
+
+Attempted to run biotradis from thoth.
+
+```{bash}
+module load python/v3
+module load perl
+```
+
+```{bash}
+bacteria_tradis -f file.list -t GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA -r /d/in16/u/sj003/refseqs/mbovis/Mbovis_AF2122_97.fasta -mm 1
+There was a problem filtering '/d/in16/u/sj003/mbovis/biotradis/G_S3_L001_R1_001.fastq' by 'GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA'; it looks like the tag was not found in any read
+None of the input files contained the specified tag.  Please check that your inputs are valid fastq files and that at least one read in one of them starts with the specified tag
+```
+
+so i tried with tag on 5' end (3' is default):
+
+```{bash}
+thoth.cryst.bbk.ac.uk> bacteria_tradis -f file.list -t GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA -r /d/in16/u/sj003/refseqs/mbovis/Mbovis_AF2122_97.fasta -td 5 -mm 1
+There was a problem filtering '/d/in16/u/sj003/mbovis/biotradis/G_S3_L001_R1_001.fastq' by 'GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA'; it looks like the tag was not found in any read
+None of the input files contained the specified tag.  Please check that your inputs are valid fastq files and that at least one read in one of them starts with the specified tag
+thoth.cryst.bbk.ac.uk> head -50 G_S3_L001_R1_001.fastq
+@M01637:39:000000000-CDG9B:1:1101:14529:1617 1:N:0:AGTGGT
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTAGATCGGAAGAGCACACGTCTGAACTCCAGTCACAGTGGTCAATCTCGTATGCCGTCTTCTGCTTGTAATAAATTATTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+```
+
+This is so weird because tag exists on each read. Tried it with shorter tag and got same error. Tried command from tutorial:
+
+```{bash}
+bacteria_tradis -v -m 0 -f fastqs.txt -t GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA -r /d/in16/u/sj003/refseqs/mbovis/Mbovis_AF2122_97.fasta
+```
+
+still same error. 
+```{bash}
+grep 'GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA' G_S3_L001_R1_001.fastq | wc -l
+1336702
+```
+
+so clearly there. sequence in fastq format. not sure what problem is?
+
+Tried with mtb data:
+
+```{bash}
+bacteria_tradis -v -f fastqs.txt -t GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA -r /d/in16/u/sj003/refseqs/Mtb/Mtb_H37Rv.fasta
+```
+
+same error
+
+made tag much shorter:
+
+```{bash}
+bacteria_tradis -v -f fastqs.txt -t AGCCAACCTGTTA -r /d/in16/u/sj003/refseqs/Mtb/Mtb_H37Rv.fasta
+```
+
+success!(?)
+
+fastqs.stats file:
+
+```{bash}
+File,Total Reads,Reads Matched,% Matched,Reads Mapped,% Mapped,Unique Insertion Sites : NC_000962.3,Seq Len/UIS : NC_000962.3,Total Unique Insertion Sites,Total Seq Len/Total UIS
+SRR4113440_1.fastq,3832963,5,0.000130447384960408,3,60,3,1470510.66666667,3,1470510.66666667
+```
+
+lol, that didn't exactly work!
+
+tried filter_tradis_tags command:
+
+```{bash}
+filter_tradis_tags -f  G_S3_L001_R1_001.fastq -t GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA -o G_S3.tag.fastq
+```
+
+this seemed to work--so if all reads have tag, what is the problem?
+Continuing to try to bypass, use remove tags command:
+
+```{bash}
+remove_tradis_tags -f G_S3.tag.fastq -t GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA -o G_S3.rmtag.fastq
+```
+
+do same for B and D samples
+
+then run biotradis without tag indicated:
+
+```{bash}
+bacteria_tradis -v -m 0 -f bovis_fastqs.txt -r /d/in16/u/sj003/refseqs/mbovis/Mbovis_AF2122_97.fasta
+```
+
+(files must be in same directory as running biotradis)
+
+(-m 0 means no minimum mapping score, not sure if this is what I want, but don't remember seeing a minimum in LHSTM script, relates to multi-mappers?)
+
+(also, bwa mem is default mapper)
+
+```
+File,Total Reads,Reads Matched,% Matched,Reads Mapped,% Mapped,Unique Insertion Sites : LT708304.1,Seq Len/UIS : LT708304.1,Total Unique Insertion Sites,Total Seq Len/Total UIS
+G_S3.rmtag.fastq,1336530,1336530,100,1104853,82.6657837833793,146043,29.7850906924673,146043,29.7850906924673
+D_S2.rmtag.fastq,867830,867830,100,774437,89.23833008769,26584,163.628648811315,26584,163.628648811315
+B_S1.rmtag.fastq,912988,912988,100,746319,81.7446669616687,48361,89.9465271603151,48361,89.9465271603151
+
+```
+
+unique ins sites (UIS): 146043, 26584, 48,361
+seq len/ UIS: 29.785, 163.6286, 89.946527
+
+not sure if these stats make sense? Ran from raw fastq instead of trimmed (.rmtag.fastq). Ran again.
+
+
+```{R}
+library(dplyr)
+data<-read.csv("~/tn_seq/Output/bovis_fastqs.stats", header=T)
+bovis_stats <- select(data, 1, 7, 8)
+bovis_stats
+```
+
+tried this with one of the dejesus samples, the transposon tag had more mismatches in it so it was more complicated.
+
+```{bash}
+filter_tradis_tags -f SRR4113440_1.fastq -t TCGGGGACTTATCAGCCAACCTGTTA -m 2 -o SRR4113440_1.tag.fastq
+```
+
+```{bash}
+bacteria_tradis -v -m 0 -f fastqs.txt -r /d/in16/u/sj003/refseqs/Mtb/Mtb_H37Rv.fasta
+```
+
+Statistics were comparable to mbovis samples--more 'unique insertion sites' than TA 'hits' in transit analysis
+
+```
+File,Total Reads,Reads Matched,% Matched,Reads Mapped,% Mapped,Unique Insertion Sites : NC_000962.3,Seq Len/UIS : NC_000962.3,Total Unique Insertion Sites,Total Seq Len/Total UIS
+SRR4113440_1.rmtag.fastq,805785,805785,100,542913,67.3769057502932,130631,33.7709425787141,130631,33.7709425787141
+```
+
+Total unique insertion sites for biotradis on this Mtb library is 130631. Transit finds 39247. Way too many.
+
+
+After Irilenia contacted and they tried to fix bug:
+
+```
+File,Total Reads,Reads Matched,% Matched,Reads Mapped,% Mapped,Unique Insertion Sites : LT708304.1,Seq Len/UIS : LT708304.1,Total Unique Insertion Sites,Total Seq Len/Total UIS
+G_S3.rmtag.fastq,1336530,1336530,100,1104853,82.6657837833793,49029,88.7210426482286,49029,88.7210426482286
+D_S2.rmtag.fastq,867830,867830,100,774437,89.23833008769,19949,218.051230638127,19949,218.051230638127
+B_S1.rmtag.fastq,912988,912988,100,746319,81.7446669616687,26934,161.502339051014,26934,161.502339051014
+```
+
+Same exact mapping coordinates, but number of unique insertions is much less!
+
+```{R}
+library(dplyr)
+data<-read.csv(here("Output/new_bovis_fastqs.stats"), header=T)
+bovis_stats <- select(data, 1, 7, 8)
+bovis_stats
+```
+
+These values are 54-67% higher than transit counts. Does biotradis count insertions on each strand as unique insertions? It would appear so. For Mtb sample SRR4113440, found 62241 unique insertions after bug fixed. Transit found 39,247 (63% of biotradis).
+
+Trying to count number of unique insertions on each strand from insertion plot file:
+
+```{bash}
+grep -c '^[^ ] [^0]' <SRR4113440_1.rmtag.out.NC_000962.3.insert_site_plot
+```
+
+number of non-zero rows in 2nd column (reverse?): 22763
+
+```{bash}
+grep -c '^[^ ] [^0]' <SRR4113440_1.rmtag.out.NC_000962.3.insert_site_plot
+```
+
+number of non-zero rows in 1st column (fwd?): 32569
+
+total: 55,332 (53,219 is total of gene-level insertions in csv summary file below, does this include intergenic regions?)
+
+If 73536 forward TAs total, and each can be either fwd or reverse insertion, then double this, 147,072 possible sites. Then using max number of insertions above, 55,332/147072 = 0.376 insertion density?
+
+Can use biotradis commands to convert insertion plot to .csv summary file:
+
+```{bash}
+nohup tradis_gene_insert_sites -o m_bovis_BDG.csv -trim3 0.1 -j $my_path/refseqs/mbovis/LT708304_updated_aug19.gff D_S2.rmtag.out.LT708304.1.insert_site_plot.gz G_S3.rmtag.out.LT708304.1.insert_site_plot.gz B_S1.rmtag.out.LT708304.1.insert_site_plot.gz &>run_tradisinsert_out &
+
+```
+
+(-trim3 trims reads from 3' end where reads are more likely tolerated/-trim5 from start, fraction of gene length trimmed, -j for joined plots in one output file)
+
+```
+MSG: EMBL stream with no ID. Not embl in my book
+```
+
+need to use different annotation file. This could be weird?
+downloaded from ena:
+```{bash}
+curl "https://www.ebi.ac.uk/ena/data/view/LT708304&display=txt&expanded=true" > LT708304.embl
+```
+
+ran again with LT708304.embl annotation file (this appears to have complete genome), and this worked.
+
+Next step is to run essentiality R script.
+
+```{bash}
+tradis_essentiality.R joined_output.m_bovis_BDG.csv
+```
+
+Compare HMM gene output to Sharon's group's calls:
+
+tnseq_compare.R
+
+```{r}
+essential_genes_custom <- bovis_custom[bovis_custom$Call == 'ES',]
+
+essential_genes_custom$Name
+
+```
+
+
+664 'essential' genes using Sharon's scripts (essential changepoint = 0.0045)
+
+286 'ambiguous' (ambiguous changepoint = 0.0072)
+
+3050 'non-essential'
+
+4000 total genes
+
+
+Using HMM:
+
+499 'essential' genes ()
+
+173 'growth disadvantage' genes (disadvantage to disruption)
+
+58  'growth advantage' genes (advantage to disruption)
+
+3376 'non-essential' genes 
+
+4122 total
+
+More genes in HMM--includes some non-coding elements such as tRNA
+
+133 essential genes in common between two approaches
+
+```
+> common_ess
+  [1] "MB0001" "MB0004" "MB0005" "MB0013" "MB0123" "MB0230" "MB0290"
+  [8] "MB0291" "MB0292" "MB0293" "MB0294" "MB0295" "MB0296" "MB0297"
+ [15] "MB0298" "MB0299" "MB0355" "MB0358" "MB0423" "MB0424" "MB0523"
+ [22] "MB0524" "MB0537" "MB0538" "MB0539" "MB0540" "MB0541" "MB0570"
+ [29] "MB0572" "MB0654" "MB0658" "MB0669" "MB0686" "MB0701" "MB0703"
+ [36] "MB0720" "MB0721" "MB0722" "MB0723" "MB0724" "MB0725" "MB0726"
+ [43] "MB0727" "MB0735" "MB0736" "MB0737" "MB0738" "MB0739" "MB0740"
+ [50] "MB0741" "MB0742" "MB0753" "MB0811" "MB0970" "MB0976" "MB1051"
+ [57] "MB1052" "MB1316" "MB1324" "MB1325" "MB1326" "MB1327" "MB1328"
+ [64] "MB1336" "MB1337" "MB1338" "MB1339" "MB1340" "MB1341" "MB1342"
+ [71] "MB1348" "MB1415" "MB1416" "MB1417" "MB1418" "MB1419" "MB1424"
+ [78] "MB1426" "MB1450" "MB1471" "MB1472" "MB1495" "MB1496" "MB1497"
+ [85] "MB1498" "MB1519" "MB1520" "MB1620" "MB1625" "MB1626" "MB1627"
+ [92] "MB1628" "MB1631" "MB1636" "MB1637" "MB1638" "MB1639" "MB1655"
+ [99] "MB1676" "MB1680" "MB1681" "MB1686" "MB1719" "MB1725" "MB1738"
+[106] "MB1739" "MB1811" "MB1822" "MB2162" "MB2216" "MB2217" "MB2218"
+[113] "MB2266" "MB2267" "MB2268" "MB2269" "MB2412" "MB2435" "MB3007"
+[120] "MB3056" "MB3057" "MB3308" "MB3493" "MB3580" "MB3659" "MB3669"
+[127] "MB3739" "MB3810" "MB3811" "MB3819" "MB3820" "MB3821" "MB3823"
+> length(common_ess)
+[1] 133
+```
+
+Compared with biotradis, as well. Had 531 genes called 'essential'.
+
+Made Venn diagram using https://bioinfogp.cnb.csic.es/tools/venny/
+
+![Venn Diagram of essential gene call overlap between tools](~/tn_seq/images/Essential_genes.jpg)
+
+Added in Gumbel method. Gumbel has only 362 genes labelled essential. Has other calls for 'short' and 'uncertain'. This is using ALL insertions, even those with only one read. The essential genes called are mostly a subset of those called by HMM method.
+
+![Venn Diagram of essential gene call overlap between transit and biotradis](~/tn_seq/images/tnseq_comparison.jpg)
+
+Spreadsheet of all tools: results/tnseq_compare.txt
+
+
+# Check out new bovis libraries bcg
+
+downloaded from dropbox on 5 August
+
+Checked that R1 and R2 all the same length for each sample
+
+Number of reads seems really low? (divide by 4 = 140-150,000+). I think you need round about 1M reads.
+
+610016 Mbovis2_B_S1_R1.fastq
+610016 Mbovis2_B_S1_R2.fastq
+588224 Mbovis2_C_S2_R1.fastq
+588224 Mbovis2_C_S2_R2.fastq
+574884 Mbovis2_D_S3_R1.fastq
+574884 Mbovis2_D_S3_R2.fastq
+
+Run FastQC
+
+I'm a little concerned about the duplication. How much is normal for tn seq? Without paired end sequencing, it is hard to separate jackpot events from legitimate overrepresented mutants (with growth advantage from insertion? Is this really common? See Chao 2016)
+
+compare B sample overrepresented in mbovis1 and 2:
+
+![mbovis1 sample B](~/tn_seq/images/mbovis1_B_R1_fastqc.png)
+
+![Mbovis 2 sample B](~/tn_seq/images/Mbovis2_B_R1_fastqc.png)
+
+![mbovis1 sample C 'G'](~/tn_seq/images/mbovis1_G_R1_fastqc.png)
+
+![mbovis2 sample C](~/tn_seq/images/mbovis2_C_R1_fastqc.png)
+
+
+![mbovis2 D shows similar pattern](~/tn_seq/images/mbovis2_D_R1_fastqc.png)
+
+![sample overrepresented seqs from D](~/tn_seq/images/mbovis2_d_seqs_fastqc.png)
+
+
+
+
+Other considerations including similar distribution of read counts in Solaimanpour et al, 2015:
+
+>Additional challenges were posed by strong biases observed in the distribution of mapped sequence reads. If every unique transposon insertion (or unique mutant) had an equal chance to yield a sequence read the distribution ofnumber ofreads per unique insertion should be similar to a normal distribution, although it could be skewed to some extent by selection against insertions in essential genes and presence of insertion “hot spots” [14]. In reality, the distribution resembles a power law distribution, which is indicative of strong biases in how likely different mutants are to be detected by the high-throughput sequencing. For example, one of our mutant libraries was represented by 2,593,856 sequence reads which could be reliably mapped to the genome but all these reads were mapped to only 23,962 unique insertions (defined by a position in the genome and the orientation ofthe transposon)—an average of 108 reads per unique insertion. In one extreme, this library included nine insertions represented by >5000 reads and 256 insertions represented by >1000 reads, whereas 5679 (24%) unique insertions were represented by a single read and 7843 (33%) by 3 or fewer reads. We considered a scenario where positive selection could lead to proliferation of some specific mutants that outcompete other mutants and the wild-type strain in the culture but the genes that contained the insertions represented by high numbers of reads also contained other insertions that were represented by normal or low numbers of reads, arguing that this scenario cannot fully explain the observed data. We believe that this bias in distribution ofreads per unique insertion could be an artifact of the experimental procedures in the preparation of the samples for sequencing, which involves amplification and enrichment for transposon-chromosome junctions, or it could arise from other processes that we do not fully understand
+
+
+This is disregarded, as read counts don't matter, but count unique insertions, instead (like biotradis and transit). Does this really solve problem entirely? 
+
+[MultiQC Report mbovis 2](data/mbovis2_multiqc_report.html)
+
+Shows duplication levels consistently at over 91%! 
+
+original mbovis samples show between 87-88.3%
+[MultiQC Report mbovis 1](data/mbovis1_multiqc_report.html)
+
+
+How does this compare with DeJesus? Sequence duplicates range from 4.6% to 77.7%. This is before their de-duplication with paired end. 
+
+
+Run TPP on new bovis samples to see statistics:
+
+Really poor insertion statistics. It looks like insertions just didn't work. Very few templates (around 10^5) and very few insertion sites. Sample C is typical:
+
+*mbovis2_C*
+total_reads (or read pairs): 147056
+trimmed_reads (reads with valid Tn prefix, and insert size>20bp): 111275
+reads1_mapped: 104104
+reads2_mapped: 0
+mapped_reads (both R1 and R2 map into genome, and R2 has a proper barcode): 104104 
+read_count (TA sites only, for Himar1): 89974
+template_count: 89974
+TA_sites: 73536
+TAs_hit: 524
+density: 0.007
+max_count (among templates): 3668
+max_site (coordinate): 2898642
+NZ_mean (among templates): 171.7
+
+Mtb had much larger read counts (for Mtb1 anyway, Mtb2 a little light):
+6936952 Mtb1_S4_R1.fastq  (1.7M)
+6936952 Mtb1_S4_R2.fastq
+2721576 Mtb2_S5_R1.fastq (680K)
+2721576 Mtb2_S5_R2.fastq
+
+![multiqc report for Mtb](~/tn_seq/images/Mtb_kendall_multiqc_report_stats.png)
+
+[MultiQC report Mtb](data/mtb_kendall_multiqc_report.html)
+
+High duplication levels (over 90% in both). In Mtb1, one sequence had 7% of reads! GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTAGACCGTCCAGTC	121557
+
+Same sequence had highest number of reads in Mtb2?
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTAGACCGTCCAGTC	50972	7.491541665564363
+
+What is this sequence? beginning is the transposon sequence, but last (CTAGACCGTCCAGTC)? is this an adaptor from other end?
+
+What about mbovis?
+Same sequence is number 2 in B,C and 4th in D
+
+Seems to be product of phage contamination.
+
+mbovis2 B:
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTAGAGGGCCCAATT	8836	5.793946388291454	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTAGACCGTCCAGTC	3951	2.590751717987725	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACCCGTCGGCGCCGTT	3579	2.3468236898704293	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAGTAGAGGTCCCGGTA	3377	2.2143681477207156	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAACGTGCTCGGGTTGC	3239	2.123878717935267	No Hit
+
+mbovis2 C:
+GTCTAGAGACCGGGGACTTATCAGCACAAAACAGCGGAGAGAACAACATG	3855	2.6214503318463716	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTAGACCGTCCAGTC	3699	2.5153682950712652	No Hit
+GTCTAGAGACCGGGGACTTATCAGCTGGCATGAGCTGGGCAAGTACTACA	3396	2.3093243390273095	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATATCCGGCGTGACCG	3380	2.298444130127298	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATGGCAAGACGGTGCA	3308	2.2494831900772496	No Hit
+GTCTAGAGACCGGGGACTTATCAGCGTAGACGTAGCCATACAGGGTGCCG	3181	2.163121531933413	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACAGTCGCGGGGACCG	3142	2.1366010227396366	No Hit
+
+mbovis2 D
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTAGAGGGCCCAATT	6625	4.609625594032883	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTGGGCACGCTGCGG	5889	4.097522282756174	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAGTACAGCACGTGTGC	4813	3.3488495070309834	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTAGACCGTCCAGTC	4782	3.3272799382136222	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAAGGTCGTCGCGATCA	3189	2.218882418018244	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAGACCCTTGAGGTTGT	3188	2.218186625475748	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATAACTTCGTGTCCCA	3139	2.1840927908934673	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATTTGGCATAGGCCTC	3025	2.1047724410489765	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATGAAGGTCGCCCAGC	2929	2.037976356969406	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATAGCGACCCGAACCC	2914	2.027539468831973	No Hit
+
+
+I've done a blast search with some of the overrepresented sequences (first grep to get entire read, as 15nt bit after transposon tag really isn't long enough)
+
+```{bash}
+grep -m 10 -e GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAAGATCGGAAGAGCAC $my_path/mtb/Mtb1_S4_R1.fastq
+```
+
+then copy whole read after gtta and do blastn search. First hit was 'Himar1-delivery and mutagenesis vector pHBurk5'. but checked loads of other ones, and they are from various other phages/vectors. esp human gamma herpesvirus. But such a short sequence, probably lots of hits.
+
+Sharon says this is what happened when they had lots of phage contamination. She will send me sequenced phiX phage and we can compare, but probably a problem with library construction (shearing DNA)?
+
+Got PhiX sequence from ncbi. Not exact but nearly:
+
+Illumina uses NC_001422
+
+http://www.ncbi.nlm.nih.gov/nucleotide/NC_001422
+
+
+>Feb 2, 2011
+>There are 5 single-nucleotide differences between the PhiX sequence from NCBI and the PhiX sequence from Illumina. Both sequences have length of 5386 bp. The difference are (in 1-based coordinates):
+
+| Position | NCBI | Illumina |
+| -------- | ---- | -------- |
+| 587 | G | A |
+| 833 | G | A |
+| 2731 | A | G |
+| 2793 | C | T |
+| 2811 | C | T |
+
+>The Illumina Phix sequence is used by RTA to report initial error rates. Note that in practice some sites in PhiX are heterozygous.
+
+from: https://www.biostars.org/p/50124/
+
+#B bovis 2 sample B duplicated sequences
+
+Sequence	Count	Percentage	Possible Source
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTAGAGGGCCCAATT	8836	5.793946388291454	No Hit
+
+-seems to be phage from Sharon's list
+
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTAGACCGTCCAGTC	3951	2.590751717987725	No Hit
+
+```{bash}
+grep -c -e CTAGACCGTCCAGTC Mbovis2_B_S1_R1.fastq
+grep -m 10 -e CTAGACCGTCCAGTC Mbovis2_B_S1_R1.fastq
+```
+
+sequence repeated 4275 when grep sample. Check full read seqs to see if in phage sequencing reads?
+
+```{bash}
+grep -c -e ATATACATATGGAAAAAAAGGAATTTCGTGTTTTGATAAAATACTGTTTT Mbovis2_B_S1_R1.fastq
+```
+
+3710
+
+This sequence appeared in phage sequence reads (795)
+```{bash}
+grep -c -e ATATACATATGGAAAAAAAGGAATTTCGTGTTTTGATAAAATACTGTTTT $my_path/mbovis/21768_MycomarT7phagemid_1_trimmed.fastq
+```
+
+
+other overrepresented seqs from B:
+
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACCCGTCGGCGCCGTT	3579	2.3468236898704293	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAGTAGAGGTCCCGGTA	3377	2.2143681477207156	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAACGTGCTCGGGTTGC	3239	2.123878717935267	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATCGCCATGTAAGCCC	2614	1.7140534018779834	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATGTCAGGAGCTGGCC	2592	1.6996275507527672	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAGCCCGCGTCGAAGTA	2481	1.6268425746209938	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACAACGAGCCGCGGGG	2215	1.4524209201070135	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACGACCGGACCGCTGA	1809	1.186198394796202	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATTCCTCGTAGAACGC	1749	1.146855164454703	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATATGGCTGGATCTTT	1731	1.135052195352253	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACATCACCGAGGGCCA	1713	1.1232492262498033	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATCGTCGCGGCCCTGG	1677	1.0996432880449036	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACGGTTGTGCGAGTCG	1651	1.0825945548969207	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAGGGCACGTTCGCGAA	1567	1.0275140324188219	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAGTCGCCGTGGCTGAA	1514	0.9927608456171642	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATGACCTACGACCGGT	1416	0.9285002360593821	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACATGAACGCCACCGT	1391	0.9121072234170907	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACGCCGTGCGCGCGTT	1391	0.9121072234170907	No Hit
+
+
+#check some from C as those seemed to be from mycobacteria
+
+Overrepresented sequences	fail
+Sequence	Count	Percentage	Possible Source
+GTCTAGAGACCGGGGACTTATCAGCACAAAACAGCGGAGAGAACAACATG	3855	2.6214503318463716	No Hit
+
+```{bash}
+grep -c -e ACAAAACAGCGGAGAGAACAACATG $my_path/mbovis/21768_MycomarT7phagemid_1_trimmed.fastq
+```
+
+0 hits. This sequence was positive for mycobacteria when I blasted.
+
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTAGACCGTCCAGTC	3699	2.5153682950712652	No Hit
+
+```{bash}
+grep -c -e CTAGACCGTCCAGTC $my_path/mbovis/21768_MycomarT7phagemid_1_trimmed.fastq
+```
+796 hits in phage seqs, also positive for bovis
+
+GTCTAGAGACCGGGGACTTATCAGCTGGCATGAGCTGGGCAAGTACTACA	3396	2.3093243390273095	No Hit
+
+```{bash}
+grep -c -e TGGCATGAGCTGGGCAAGTACTACA $my_path/mbovis/21768_MycomarT7phagemid_1_trimmed.fastq
+```
+no hits in phage seqs
+
+(had mycobacterium hits when I blasted)
+
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATATCCGGCGTGACCG	3380	2.298444130127298	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATGGCAAGACGGTGCA	3308	2.2494831900772496	No Hit
+GTCTAGAGACCGGGGACTTATCAGCGTAGACGTAGCCATACAGGGTGCCG	3181	2.163121531933413	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACAGTCGCGGGGACCG	3142	2.1366010227396366	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACGTGGCCGCGTTCAA	2902	1.9733978892394735	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACAGCGTGCCAACCGC	2721	1.8503155260581001	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATGCGCCACCGTGACA	2395	1.6286312697203784	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATATGCACGGTACTTC	2139	1.4545479273202047	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAGAGTCGAGGACATGC	2128	1.4470677837014472	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACAACTATCCGGCGAT	2096	1.4253073659014253	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACAACTTCGGTAGCGG	2040	1.3872266347513873	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAAGCTGAGCACCACGC	2039	1.3865466216951365	No Hit
+
+
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATGTATCGAATGGCCA	1837	1.2491839843324992	No Hit
+
+also none in phage seq reads. Mycobacteria hits with blast
+
+
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACGTGCGCGACGTGCC	1763	1.198863018169949	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATTCGGTCTTGACCCG	1725	1.173022522032423	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACGCCAGCAAGTCGCT	1655	1.1254216080948753	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACATATGCCAGGACTT	1639	1.1145413991948645	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAGCCCGCGATCTCGGA	1611	1.0955010336198456	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATCACCTACTCGACCA	1605	1.0914209552823415	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACCTGCTGTCGATGGA	1387	0.9431781090196931	No Hit
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTATGATGACAGGCTTCG	1364	0.9275378087259275	N
+
+so two different phages--one sequenced by Sharon, 'mycomar phage T7' and also PhiX phage for control. No PhiX contamination in samples of mbovis, but lots of T7 phage in B and D. c had lots of mycobacterial overrep sequences, so maybe PCR event? But sequencing/read count is so low, who knows what it is doing to proportions.
+
+
+
+#comparing mbovis and mtb (dejesus) transit gene calls
+
+10 August: Spoke to Irilenia. Might be interesting to see how Transit results compare for m bovis and mtb.
+
+First run Transit hmm on all libraries in DeJesus paper (14). Use comma separated list and take 'mean' of reads with 'TTR' normalisation (these are default settings for transit hmm). Use results in /tpp_results/paired_end.
+
+```{bash}
+nohup transit hmm $my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113427.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113428.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113429.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113430.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113431.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113432.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113433.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113434.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113435.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113436.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113437.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113438.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113439.wig,$my_path/dejesus_mtb/tpp_results/paired_end/pe_SRR4113440.wig $my_path/refseqs/Mtb/mtbH37Rv.prot_table dejesus-Mtb.txt &>run_transit_out &
+```
+
+
+need to compare genes.txt files to see what genes present in both lists.
+
+tnseq_compare.R
+
+[compare gene names for mtb and bovis](~/tn_seq/Output/comp_mtb_bovis.txt)
+
+13 September
+
+Redo this using list of orthologous ORFS in bovis and mtb (supplied by Sharon)
+
+```{R tnseq_compare.R}
+library(dplyr)
+
+mtb_genes<-read.delim("results/dejesus-Mtb_genes.txt", sep="\t", header=FALSE, stringsAsFactors=F, skip=4)
+head(mtb_genes)
+
+mtb_hmm <- select(mtb_genes, 1, 2, 11)
+colnames(mtb_hmm) <- c("ORF","gene","call")
+View(mtb_hmm)
+length(mtb_hmm$call)
+
+bovis_hmm <- select(hmm_results, 1, 2, 11)
+colnames(bovis_hmm) <- c("ORF","gene", "call")
+# have to trim whitespace before gene to compare with mtb
+bovis_hmm$gene<-trimws(bovis_hmm$gene)
+View(bovis_hmm)
+length(bovis_hmm$call)
+
+#this calls two for each gene, have to ask for 'unique'
+# get rid of extra lines 
+bovis_hmm<-unique(bovis_hmm)
+# order
+bovis_hmm<-bovis_hmm[order(bovis_hmm$ORF),]
+# remove all but MB orf names
+# put into df1 all rows where pedigree_dhl starts with CCB133$
+p1 <- 'Mb'
+bovis_hmm <- subset(bovis_hmm, grepl(p1, bovis_hmm$ORF) )
+# remove any hyphens after the orf name
+for (i in 1:nrow(bovis_hmm)){
+  bovis_hmm$ORF[i]<-sub("\\s-$", "", bovis_hmm$ORF[i], ignore.case=TRUE)
+}
+View(bovis_hmm)
+length(bovis_hmm$gene)
+
+# read in ortholog file
+orthologs<-read.delim("data/mb_mtb_orthologs_1.txt", sep=",", header=FALSE, stringsAsFactors=F, skip=1)
+colnames(orthologs)<-c("bovis", "mtb", "v/i")
+View(orthologs)
+nrow(orthologs)
+
+# make table with orf names, calls in bovis and mtb
+comp_calls<-as.data.frame(matrix(0, nrow = length(orthologs$bovis), ncol = 5))
+colnames(comp_calls)<-c("bovis", "mt", "v/i", "mb_call", "mt_call")
+head(comp_calls)
+
+for (i in 1:nrow(orthologs)){
+  #if (orthologs$bovis[i] %in% bovis_hmm$ORF){
+  comp_calls$bovis[i]   <- orthologs$bovis[i]
+  comp_calls$mt[i]      <- orthologs$mtb[i]
+  comp_calls$`v/i`[i]   <- orthologs$`v/i`[i]
+  if (orthologs$bovis[i] %in% bovis_hmm$ORF){
+    comp_calls$mb_call[i] <- bovis_hmm[which(bovis_hmm$ORF == orthologs$bovis[i]),3]
+  }else{
+    comp_calls$mb_call[i] <- "N/A"
+    }
+  if (orthologs$mtb[i] %in% mtb_hmm$ORF){
+    comp_calls$mt_call[i] <- mtb_hmm[which(mtb_hmm$ORF == orthologs$mtb[i]),3]
+  }else{
+    comp_calls$mt_call[i] <- "N/A"
+    }
+}
+View(comp_calls)
+
+# write table
+write.table(comp_calls, file = 'results/comp_orfs.txt', quote = FALSE, sep = '\t', row.names=FALSE)
+```
+
+[Table of essentiality calls for mtb and bovis](results/comp_orfs.txt)
+
+
+After speaking with Sharon, worked on including information from Malone, 2018 transcriptomics paper in a spreadsheet with essentiality calls.
+
+[Malone, 2018](https://www.microbiologyresearch.org/content/journal/mgen/10.1099/mgen.0.000163#html_fulltext)
+
+```{R}
+#pull in malone tables of functional categories
+
+library(dplyr)
+
+# get info from sheet 3 including orf pairs, gene names, functional categories, identical
+malone_df<-read.delim("data/Malone_orthologs.csv", sep=",", header=FALSE, stringsAsFactors=F, skip=3)
+head(malone_df)
+malone_3<-select(malone_df, 2,3,4,6,11)
+head(malone_3)
+# remove duplicates (36 duplicates based on mbovis orf name)
+malone_3<-malone_3[!duplicated(malone_3$V3), ]
+
+# make dataframe for complete comparison based on mbovis ORFs
+bovis_mtb_df<-as.data.frame(matrix(0, nrow = length(bovis_hmm$gene), ncol = 8))
+colnames(bovis_mtb_df)<-c("Mbovis", "Mtb", "gene", "func_cat", "i/v", "alteration", "ess_bovis", "ess_mtb")
+head(bovis_mtb_df)
+
+bovis_mtb_df$Mbovis    <- bovis_hmm$ORF
+bovis_mtb_df$gene      <- bovis_hmm$gene
+bovis_mtb_df$ess_bovis <- bovis_hmm$call
+head(bovis_mtb_df)
+
+for (i in 1:nrow(bovis_mtb_df)){
+  if (bovis_mtb_df$Mbovis[i] %in% malone_3$V3){
+    bovis_mtb_df$Mtb[i]    <- malone_3[which(malone_3$V3 == bovis_mtb_df$Mbovis[i]), 1]
+    bovis_mtb_df$`i/v`[i]  <- malone_3[which(malone_3$V3 == bovis_mtb_df$Mbovis[i]), 5]
+  }else{
+    bovis_mtb_df$Mtb[i]    <- ""
+    bovis_mtb_df$`i/v`[i]  <- ""
+  }
+  if (bovis_mtb_df$Mtb[i] %in% mtb_hmm$ORF){
+    bovis_mtb_df$ess_mtb[i] <- mtb_hmm[which(mtb_hmm$ORF == bovis_mtb_df$Mtb[i]), 3]
+  }
+  if (bovis_mtb_df$Mbovis[i] %in% malone_3$V3){
+    bovis_mtb_df$func_cat[i] <- malone_3[which(malone_3$V3 == bovis_mtb_df$Mbovis[i]), 4]
+  }else{
+    bovis_mtb_df$func_cat[i]    <- ""
+  }
+}
+
+View(bovis_mtb_df)
+
+# work on getting alteration from other sheets
+# column 2 is mbovis name, 13 is alteration
+#need to do for each of 9(?) sheets
+
+filenames <- list.files("data/Malone", pattern="*.csv", full.names=TRUE)
+filenames
+
+for (i in 1:9){
+    temp<-read.delim(filenames[i], sep=",", header=FALSE, stringsAsFactors=F, skip=1)
+    malone_temp<-select(temp, 2, 13)
+    for (j in 1:nrow(malone_temp)){
+      if (malone_temp$V2[j] %in% bovis_mtb_df$Mbovis){
+          bovis_mtb_df[which(bovis_mtb_df$Mbovis == malone_temp$V2[j]), 6] <- malone_temp$V13[j]
+      }
+    }
+}
+
+for (i in 1:nrow(bovis_mtb_df)){
+  if (bovis_mtb_df$alteration[i] == 0){
+      bovis_mtb_df$alteration[i] <- ""
+  }
+}
+
+View(bovis_mtb_df)
+
+#write table
+write.table(bovis_mtb_df, file = 'results/full_compare.csv', quote = FALSE, sep = '\t', row.names=FALSE)
+```
+
+New file is 'full_compare.csv'
+
+
+How does the published results of essential genes in Dejesus compare with my replicated results?
+
+Download table S3 from DeJesus, 2017
+Compare ORFs and call between my hmm results and published results
+
+```{R}
+#compare Dejesus published results with mtb_hmm calls
+# get info from sheet 3 including orf pairs, gene names, functional categories, identical
+temp_df<-read.delim("data/DeJesus_ORF_ess_calls.csv", sep=",", header=FALSE, stringsAsFactors=F, skip = 4)
+dejesus_df<-select(temp_df, 1, 13)
+
+mtb_compare<-as.data.frame(matrix(0, nrow = nrow(dejesus_df), ncol = 3))
+colnames(mtb_compare)<-c("ORF", "dejesus_call", "mtb_call")
+
+head(mtb_compare)
+mtb_compare$ORF<-dejesus_df[,1]
+mtb_compare$dejesus_call<-dejesus_df[,2]
+
+head(mtb_hmm)
+
+for (i in 1:nrow(mtb_compare)){
+  if (mtb_compare$ORF[i] %in% mtb_hmm$ORF){
+    mtb_compare$mtb_call[i] <- mtb_hmm[which(mtb_hmm$ORF == mtb_compare$ORF[i]), 3]
+  }else{
+    mtb_compare$mtb_call[i] <- ""
+  }
+  # n/a is not analysed, therefore same as uncertain in paper?
+  if (mtb_compare$dejesus_call[i] == "Uncertain"){
+    mtb_compare$dejesus_call[i] <- "N/A"
+  }
+}
+View(mtb_compare)
+
+length(which(mtb_compare$dejesus_call=="ESD"))
+
+## list orfs with different calls
+ess_diff<-NULL
+for (i in 1:nrow(mtb_compare)){
+  if (mtb_compare$dejesus_call[i] != mtb_compare$mtb_call[i]){
+    ess_diff<-c(ess_diff, mtb_compare$ORF[i])
+  }
+}
+length(ess_diff)
+#402 differences are these down to terminology?
+length(which(mtb_compare$dejesus_call=="ESD"))
+# 29 are ESD which is an essential domain within ORF
+length(which(mtb_compare$mtb_call==""))
+# 134 orfs not annotated in our file (are these new novel regions?)
+length(which(mtb_compare$dejesus_call=="N/A"))
+length(which(mtb_compare$mtb_call=="N/A"))
+#76 are uncertain in dejesus paper, only 5 in our analysis (same 5)
+length(which(mtb_compare$mtb_call=="N/A" & mtb_compare$dejesus_call=="N/A"))
+# 11 ESD calls in paper are ES in our analysis
+length(which(mtb_compare$dejesus_call=="ESD" & mtb_compare$mtb_call=="ES"))
+```
+###########
+
+Make an insertion plot (circle graph?) for TA insertions in mtb and mbovis. One track for each.
+
+First make combined .wig files so that we can compare sum of insertions at each TA site.
+
+```{bash}
+transit export combined_wig pe_SRR4113427.wig,pe_SRR4113428.wig,pe_SRR4113429.wig,pe_SRR4113430.wig,pe_SRR4113431.wig,pe_SRR4113432.wig,pe_SRR4113433.wig,pe_SRR4113434.wig,pe_SRR4113435.wig,pe_SRR4113436.wig,pe_SRR4113437.wig,pe_SRR4113438.wig,pe_SRR4113439.wig,pe_SRR4113440.wig $my_path/refseqs/Mtb/mtbH37Rv.prot_table dejesus_combined_ttr.wig -n TTR
+```
+
+Had already done this with mbovis: 'bovis_combined_TTR.wig'
+
+
+Possibly will cause problem because dejesus uses 14 libraries and will have more insertions? maybe binary value will be necessary (i.e. 'insertion' vs 'non-insertion'). Cutoff of number of reads? Use mean insertion/TA site?
+normalise with NZmean?
+
+
+##############################################################################
+
+
+16 February 2021
+
+Working on hiseq data of BCG libraries
+~/Data/bovis_hiseq/
+
+sample sheet: 
+						
+[Data]						
+Sample_ID	Sample_Name	Sample_Plate	Sample_Well	index	Sample_Project	Description
+MbA01	36 RLN			ATCACGTT	MbovisLung1	
+MbA02	36 LLN			CGATGTTT	MbovisLung1	
+MbA03	36 CT			TTAGGCAT	MbovisLung1	
+MbA04	40 CrM			TGACCACT	MbovisLung1	
+MbA05	40 CaM			ACAGTGGT	MbovisLung1	
+MbA010	40 RLN			TAGCTTGT	MbovisLung1	
+MbA011	40 LLN			GGCTACAG	MbovisLung1	
+MbA012	42 RLN			CTTGTACT	MbovisLung1	
+MbA013	42 LLN			TGGTTGTT	MbovisLung1	
+MbA014	42 CT			TCTCGGTT	MbovisLung1	
+MbA06	33L			GCCAATGT	MbovisLung1	
+MbA07	36L			CAGATCTG	MbovisLung1	
+MbA08	39L			ACTTGATG	MbovisLung1	
+MbA09	40L			GATCAGCG	MbovisLung1	
+MbA015	42L			TAAGCGTT	MbovisLung1	
+MbA016	43L			TCCGTCTT	MbovisLung1	
+MbA017	47L			TGTACCTT	MbovisLung1	
+MbA018	50L			TTCTGTGT	MbovisLung1	
+MbA019	MbB			TCTGCTGT	MbovisLung1	
+MbA020	MbC			TTGGAGGT	MbovisLung1	
+MbA021	MbD			TCGAGCGT	MbovisLung1	
+MtbA022	Mtb1			TGATACGT	MbovisLung1	
+MtbA023	Mtb2			TGCATAGT	MbovisLung1	
+
+
+
+1) Check for read length (151bp)
+```{bash}
+head -50 <file.fastq>
+```
+
+all ok, 150
+
+2) Count number of reads:  R1 and R2 should match
+
+loop through each file in folder:
+
+```{bash}
+find . -name '*.fastq' -exec wc -l {} +;
+```
+
+```
+30027264 ./MbA021_R1_001.fastq
+  189224 ./MbA020_R1_001.fastq
+ 23496788 ./MbA019_R2_001.fastq
+ 23496788 ./MbA019_R1_001.fastq
+ 30027264 ./MbA021_R2_001.fastq
+  189224 ./MbA020_R2_001.fastq
+ 107426552 total
+ ```
+Looks like all R1 and R2 paired reads match, but C library has very few reads (189,224). Factor of 100 lower than others.
+
+
+3) Run fastqc
+
+Used conda env 'rna' and installed fastqc, multiqc, bwa and transit. Fastqc wasn't working, so tried another conda installation: 
+
+```{bash}
+conda install -c bioconda/label/broken fastqc 
+```
+
+Then program worked.
+
+script to iterate through all files and run fastqc and multiqc:
+
+```{bash}
+#!/bin/bash
+
+# run_qc.sh
+# usage: bash run_qc.sh
+
+FILES=*.fastq
+
+for file in $FILES
+do
+	filename=$(basename "$file")
+	filename="${filename%.*}"
+
+	echo "File on the loop: 	$filename"
+
+	#call fastQC quality analysis
+	fastqc ${file}
+
+	echo -e "########################\n\n"
+done
+
+
+# Run MultiQC
+# -f overwrites existing files, . runs with files in current directory, -o output directory
+echo "Running MultiQC..."
+multiqc -f . -o bovis_hiseq/multiqc
+```
+
+[multiqc report](~/Data/bovis_hiseq/bovis_hiseq/multiqc/multiqc_report.html)
+
+
+Time for Transit on B and D
+
+ran tpp --help and got this exception:
+
+```
+pkg_resources.DistributionNotFound: The 'tnseq-transit==3.0.2' distribution was not found and is required by the application
+```
+
+re-installed but it says already installed, so no change. It also mentions Pillow 6.0 which is one of the dependencies, but I have more recent version.create new env with everything installed at once?
+
+```{bash}
+conda install -c bioconda transit bwa fastqc multiqc
+```
+
+This brought me to pillow 7.2.0 so maybe it will work.No. 
+
+Made new env 'tnseq' with python=3.6 and pillow=6.0. reinstalled all bioconda above. TPP seems to work now.
+
+run tpp for B(19) and D(21), R1 only
+
+```{bash}
+tpp -bwa ~/anaconda3/envs/tnseq/bin/bwa -ref ~/git/tn_seq/data/Mbovis_AF2122_97.fasta -reads1 ~/Data/bovis_hiseq/MbA019_R1_001.fastq -output bovis_hiseq_tpp
+```
+
+Stats for B library (19):
+
+```
+# title: Tn-Seq Pre-Processor
+# date: 02/16/2021 14:58:24
+# command: python /Users/jenniferstiens/anaconda3/envs/tnseq/bin/tpp -bwa /Users/jenniferstiens/anaconda3/envs/tnseq/bin/bwa -ref /Users/jenniferstiens/git/tn_seq/data/Mbovis_AF2122_97.fasta -reads1 /Users/jenniferstiens/Data/bovis_hiseq/MbA019_R1_001.fastq -output bovis_hiseq_tpp
+# transposon type: Himar1
+# protocol type: Sassetti
+# bwa flags: 
+# read1: /Users/jenniferstiens/Data/bovis_hiseq/MbA019_R1_001.fastq
+# read2: 
+# ref_genome: /Users/jenniferstiens/git/tn_seq/data/Mbovis_AF2122_97.fasta
+# replicon_ids: 
+# total_reads (or read pairs): 5874197
+# trimmed_reads (reads with valid Tn prefix, and insert size>20bp): 5511097
+# reads1_mapped: 5128342
+# reads2_mapped: 0
+# mapped_reads (both R1 and R2 map into genome, and R2 has a proper barcode): 5128342 
+# read_count (TA sites only, for Himar1): 4856314
+# template_count: 4856314
+# template_ratio (reads per template): 1.00
+# TA_sites: 73536
+# TAs_hit: 22539
+# density: 0.307
+# max_count (among templates): 36142
+# max_site (coordinate): 1806084
+# NZ_mean (among templates): 215.5
+# FR_corr (Fwd templates vs. Rev templates): 0.857
+# BC_corr (reads vs. templates, summed over both strands): 1.000
+# primer_matches: 22955 reads (0.4%) contain CTAGAGGGCCCAATTCGCCCTATAGTGAGT (Himar1)
+# vector_matches: 12261 reads (0.2%) contain CTAGACCGTCCAGTCTGGCAGGCCGGAAAC (phiMycoMarT7)
+# adapter_matches: 187149 reads (3.2%) contain GATCGGAAGAGCACACGTCTGAACTCCAGTCAC (Illumina/TruSeq index)
+# misprimed_reads: 122199 reads (2.1%) contain Himar1 prefix but don't end in TGTTA
+# read_length: 150 bp
+# mean_R1_genomic_length: 112.6 bp
+```
+
+
+
+```{bash}
+tpp -bwa ~/anaconda3/envs/tnseq/bin/bwa -ref ~/git/tn_seq/data/Mbovis_AF2122_97.fasta -reads1 ~/Data/bovis_hiseq/MbA021_R1_001.fastq -output bovis_hiseq_tpp_21
+```
+
+
+from inside folder with .wig files run:
+```{bash}
+transit hmm bovis_hiseq_tpp_20.wig,bovis_hiseq_tpp_21.wig,bovis_hiseq_tpp_19.wig ~/git/tn_seq/data/mbovis.prot_table bovis_hiseq_hmm_combo.wig
+```
+
+Includes TTR normalisation as default.
+
+Says that one or more files have no non-zero positions, but this isn't true? Ran fine when I did 19 and 20 independently.
+
+```
+One or more of your .wig files does not include any empty sites (i.e. sites with zero read-counts). Proceeding as if data was Tn5 (all other sites assumed to be zero)!
+```
+Something wrong with .wig for sample 21 (G). Run TPP again to get new .wig file.
+
+Ran transit alone on 21. Worked fine. Run all three together but use 'sum' instead of mean since some less dense than others and not replicates.]
+
+```{bash}
+transit hmm -r Sum bovis_hiseq_tpp_21.wig,bovis_hiseq_tpp_20.wig,bovis_hiseq_tpp_19.wig ~/git/tn_seq/data/mbovis.prot_table hmm_bovis_hiseq_combo.wig
+```
+
+Worked better. 
+
+```{R}
+# sum up results file for Transit hmm for new bovis hiseq set
+
+hmm_results<-read.delim("hmm_bovis_hiseq_combo_genes.wig", 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+head(hmm_results)
+
+
+# change to just gene and call--will affect downstream plots
+bovis_hmm <- select(hmm_results, 2, 1, 11)
+colnames(bovis_hmm) <- c("gene","ORF", "call")
+# have to trim whitespace before gene to compare with mtb
+bovis_hmm$gene<-trimws(bovis_hmm$gene)
+View(bovis_hmm)
+length(bovis_hmm$call)
+
+#this calls two for each gene, have to ask for 'unique'
+length(unique(bovis_hmm$ORF))
+bovis_hmm<-unique(bovis_hmm)
+nrow(bovis_hmm)
+View(bovis_hmm)
+
+#write to .csv for sharon
+write.csv(bovis_hmm, "hiseq_bovis_transit.csv", quote=F)
+```
+
+May go ahead and check Mtb libraries next.
+
+length of reads:
+151
+
+number of lines in each fastq file (divided by 4):
+```
+ 8851344 MtbA022_R1_001.fastq
+ 8851344 MtbA022_R2_001.fastq
+ 7133644 MtbA023_R1_001.fastq
+ 7133644 MtbA023_R2_001.fastq
+ 31969976 total
+
+ ```
+ Ran fastqc and multiqc. More duplicated sequences this time. Fewer unique reads.
+ Both <1M unique reads. 
+ 
+ [Mtb multiqc report](file:///Users/jenniferstiens/Data/mtb_hiseq/multiqc/multiqc_report.html)
+ 
+ Run TPP on both and see what mapping looks like.
+ Make sure using tnseq conda env
+ 
+```{bash}
+conda activate tnseq
+tpp -bwa ~/anaconda3/envs/tnseq/bin/bwa -ref ~/git/tn_seq/data/Mtb_H37Rv.fasta -reads1 ~/Data/mtb_hiseq/MtbA022_R1_001.fastq -output mtb_hiseq_tpp
+```
+ 
+Not too bad.
+Mtb1 (MtbA022) density = 0.36, NZ mean = 57.3, reads1_mapped: 1703692
+Mtb2 (MtbA023) density = 0.317, NZ = 51.2, reads mapped: 1359397
+
+Seems there was more phi contamination, not sure if this affects saturation? Also, more primer and adapters present--why is that? Illumina supposed to de-duplicate and trim? Should I try trimming myself? Not sure sequences of all adapters/primers? Would this help?
+
+Analyse read distribution/insertions/etc for Mtb
+
+```{r histograms}
+# sample name, condition, experiment, ta_site, read_count
+data_path = here('in_vitro_data/mtb_hiseq/TPP')
+#wig_files <- dir(data_path, pattern="*.wig$")
+wig_files = list.files(path = data_path, pattern = ".wig$", full.names = FALSE)
+
+df1 <- tibble(sample=wig_files) %>%
+  mutate(file_contents = map(wig_files,         
+           ~ read_delim(file.path(data_path, .), skip=1, delim=" ", show_col_types = F))
+        )  
+colnames(unnest(df1, cols=2))
+# rename with sample name instead of filename (have to do this for specific samples) maybe rename in directory first
+df1[[1]]<-sub("_hiseq_tpp", "", df1[[1]])
+df1[[1]]<-sub(".wig", "", df1[[1]])
+
+# all unnested
+mtb_df1 <- unnest(df1, cols=2)
+#change column names
+mtb_df1 <- rename(mtb_df1, ta_coord = variableStep, 
+       reads = `chrom=Mtb_H37Rv`)
+
+saveRDS(mtb_df1, here("R_data/mtb_invitro_insertions.RData"))
+
+nz_sites <- mtb_df1 %>% filter(reads != 0)
+
+#histograms for each
+samples <- unique(nz_sites$sample)
+for (i in 1:2){
+  my_sample <- samples[i]
+  nz_sample <- nz_sites %>% filter(sample=={my_sample}) %>% select(ta_coord, reads)
+  #truncate top 1% of reads
+  nz_trunc <- nz_sample %>% mutate(rank = ntile(reads, 100)) %>% filter(rank != 100)
+
+pl <- ggplot(nz_sample, aes(x=reads)) +
+    geom_histogram(bins=1000) +
+    xlim(1,2000) +
+    ylim(0, 1000) +
+    ggtitle(paste(my_sample, " distribution of non-zero reads"))
+  file <- paste("images/", my_sample, "_nz_distribution.pdf", sep="")
+  ggsave(here(file), pl)
+  png(here(paste("images/", my_sample, "_qq_plot.png", sep="")))
+  qqplot(y= nz_trunc$reads,
+         x=qgeom(ppoints(length(nz_trunc$reads)), 
+                 prob= 1/(mean(nz_trunc$reads))),
+         xlim = c(0, max(
+           qgeom(ppoints(length(nz_trunc$reads)), 
+               prob= 1/(mean(nz_trunc$reads))),
+           nz_trunc$reads )),
+         xlab = "Data Quantiles", 
+         ylab = "Theoretical Quantiles",
+         )
+  qqline(nz_trunc$reads, 
+        distribution = function(p) qgeom(p,
+                                    1/(mean(nz_trunc$reads))),
+       prob = c(0.25, 0.75), col = "red")
+  #abline(0,1, col="blue")
+  dev.off()
+}
+
+
+#with ggplot
+# data <- nz_sites %>% filter(sample=="bovis_19") %>% select(ta_coord, reads)
+# p <- ggplot(data, aes(sample=reads))
+# p + stat_qq(distribution = qgeom) +
+#   stat_qq_line(distribution = qgeom)
+
+#combined dist and qq plots (sum reads)
+sum_nz_reads <- mtb_df1 %>% group_by(ta_coord) %>% summarise(across(where(is.numeric), ~ sum(.x, na.rm = TRUE))) %>% filter(reads > 0)
+#truncate top 1% of reads
+sum_nz_trunc <- sum_nz_reads %>% mutate(rank = ntile(reads, 100)) %>% filter(rank != 100)
+
+ggplot(sum_nz_reads, aes(x=reads)) +
+    geom_histogram(bins=1000) +
+    xlim(1,2000) +
+    ylim(0, 1000) +
+    ggtitle("distribution of summed non-zero reads")
+ggsave(here("images/summed_nz_distribution_mtb.png"))
+png(here("images/summed_mtb_nz_qq_plot.png"))
+qqplot(y= sum_nz_trunc$reads,
+        x=qgeom(ppoints(length(sum_nz_trunc$reads)), 
+                 prob= 1/(mean(sum_nz_trunc$reads))), 
+        xlab = "Data Quantiles", 
+        ylab = "Theoretical Quantiles",
+       xlim = c(0, max(
+           qgeom(ppoints(length(sum_nz_trunc$reads)), 
+               prob= 1/(mean(sum_nz_trunc$reads))),
+           sum_nz_trunc$reads )),
+       )
+qqline(sum_nz_trunc$reads, 
+      distribution = function(p) qgeom(p,                                   1/(mean(sum_nz_trunc$reads))),
+       prob = c(0.25, 0.75), col = "red")
+dev.off()
+
+```
+
+
+
+
+```
+# date: 02/18/2021 13:01:19
+# command: python /Users/jenniferstiens/anaconda3/envs/tnseq/bin/tpp -bwa /Users/jenniferstiens/anaconda3/envs/tnseq/bin/bwa -ref /Users/jenniferstiens/git/tn_seq/data/Mtb_H37Rv.fasta -reads1 /Users/jenniferstiens/Data/mtb_hiseq/MtbA022_R1_001.fastq -output mtb_hiseq_tpp
+# transposon type: Himar1
+# protocol type: Sassetti
+# bwa flags:
+# read1: /Users/jenniferstiens/Data/mtb_hiseq/MtbA022_R1_001.fastq
+# read2:
+# ref_genome: /Users/jenniferstiens/git/tn_seq/data/Mtb_H37Rv.fasta
+# replicon_ids:
+# total_reads (or read pairs): 2212836
+# trimmed_reads (reads with valid Tn prefix, and insert size>20bp): 2033730
+# reads1_mapped: 1703692
+# reads2_mapped: 0
+# mapped_reads (both R1 and R2 map into genome, and R2 has a proper barcode): 1703692
+# read_count (TA sites only, for Himar1): 1538393
+# template_count: 1538393
+# template_ratio (reads per template): 1.00
+# TA_sites: 74604
+# TAs_hit: 26828
+# density: 0.360
+# max_count (among templates): 1426
+# max_site (coordinate): 1175311
+# NZ_mean (among templates): 57.3
+# FR_corr (Fwd templates vs. Rev templates): 0.485
+# BC_corr (reads vs. templates, summed over both strands): 1.000
+# primer_matches: 119096 reads (5.4%) contain CTAGAGGGCCCAATTCGCCCTATAGTGAGT (Himar1)
+# vector_matches: 80762 reads (3.6%) contain CTAGACCGTCCAGTCTGGCAGGCCGGAAAC (phiMycoMarT7)
+# adapter_matches: 76293 reads (3.4%) contain GATCGGAAGAGCACACGTCTGAACTCCAGTCAC (Illumina/TruSeq index)
+# misprimed_reads: 47671 reads (2.2%) contain Himar1 prefix but don't end in TGTTA
+# read_length: 150 bp
+# mean_R1_genomic_length: 112.7 bp
+
+
+# date: 02/18/2021 13:07:50
+# command: python /Users/jenniferstiens/anaconda3/envs/tnseq/bin/tpp -bwa /Users/jenniferstiens/anaconda3/envs/tnseq/bin/bwa -ref /Users/jenniferstiens/git/tn_seq/data/Mtb_H37Rv.fasta -reads1 /Users/jenniferstiens/Data/mtb_hiseq/MtbA023_R1_001.fastq -output mtb23_hiseq_tpp
+# transposon type: Himar1
+# protocol type: Sassetti
+# bwa flags:
+# read1: /Users/jenniferstiens/Data/mtb_hiseq/MtbA023_R1_001.fastq
+# read2:
+# ref_genome: /Users/jenniferstiens/git/tn_seq/data/Mtb_H37Rv.fasta
+# replicon_ids:
+# total_reads (or read pairs): 1783411
+# trimmed_reads (reads with valid Tn prefix, and insert size>20bp): 1682656
+# reads1_mapped: 1359397
+# reads2_mapped: 0
+# mapped_reads (both R1 and R2 map into genome, and R2 has a proper barcode): 1359397
+# read_count (TA sites only, for Himar1): 1210855
+# template_count: 1210855
+# template_ratio (reads per template): 1.00
+# TA_sites: 74604
+# TAs_hit: 23634
+# density: 0.317
+# max_count (among templates): 1079
+# max_site (coordinate): 1662986
+# NZ_mean (among templates): 51.2
+# FR_corr (Fwd templates vs. Rev templates): 0.379
+# BC_corr (reads vs. templates, summed over both strands): 1.000
+# primer_matches: 124858 reads (7.0%) contain CTAGAGGGCCCAATTCGCCCTATAGTGAGT (Himar1)
+# vector_matches: 80654 reads (4.5%) contain CTAGACCGTCCAGTCTGGCAGGCCGGAAAC (phiMycoMarT7)
+# adapter_matches: 63285 reads (3.5%) contain GATCGGAAGAGCACACGTCTGAACTCCAGTCAC (Illumina/TruSeq index)
+# misprimed_reads: 37494 reads (2.1%) contain Himar1 prefix but don't end in TGTTA
+# read_length: 150 bp
+# mean_R1_genomic_length: 112.7 bp
+
+```
+Barplot with cumulative insertion density
+
+```{r cumul_insertion_density_mtb}
+library(tidyverse)
+library(here)
+
+mtb_df1 <- readRDS(here("R_data/mtb_invitro_insertions.RData"))
+nz_sites <- mtb_df1 %>% filter(reads != 0)
+
+mtb_22 <- nz_sites %>% filter(sample=="mtb22") %>% select(ta_coord) %>% pull()
+mtb_23 <- nz_sites %>% filter(sample=="mtb23") %>% select(ta_coord) %>% pull()
+
+#find total insertion density for each sample
+total_ta_mtb = 74604
+ins_den_22 <- length(mtb_22) / total_ta_mtb
+ins_den_23 <- length(mtb_23) / total_ta_mtb
+ins_den_tb <- tibble(sample=c("mtb_22", "mtb_23"), ins_density = c(ins_den_22, ins_den_23))
+
+#barplot of insertion density
+library(RColorBrewer)
+ggplot(ins_den_tb, aes(x=sample, y=ins_density, fill=sample)) +
+  geom_bar(stat="identity") +
+  scale_fill_brewer(palette = "Set2") +
+  ggtitle("Comparison of TA site saturation of Mtb samples") +
+  ylab("saturation") +
+  theme(axis.title.x = element_blank(), axis.ticks.x = element_blank()) +
+  guides(fill="none")
+ggsave(here("images/Mtb_insertion_barplot.png"))
+#union of total sites
+tb_union <- union(mtb_22, mtb_23)
+#29919 total ta's hit
+length(tb_union)/total_ta_mtb
+# total 40% TA's hit in mtb
+
+#number of total reads with insertions in all reps/exp (union) vs number in common in all samples (intersect)
+int_ta <- intersect(mtb_22, mtb_23)
+#20543 in common (good correlation?)
+length(int_ta)/ length(tb_union)
+#69% in both
+
+#make df
+cumul_unique_tb <- tibble(
+  dataset=c("mtb_22", "mtb_23"),
+  len_tas = c(length(mtb_22), length(mtb_23)),
+  cum_tas = c(length(mtb_22), length(union(mtb_22, mtb_23))),
+  cum_ins_den = c(length(mtb_22)/total_ta_mtb, length(union(mtb_22, mtb_23))/total_ta_mtb))
+
+#cumul density
+ggplot(cumul_unique_tb, aes(x=dataset, y=len_tas, fill=dataset)) +
+  geom_bar(stat="identity") +
+  geom_line(aes(y=cum_tas), group=1) +
+  geom_point(aes(y=cum_tas), group=1) +
+  ylim(0,41000) +
+  scale_fill_brewer(palette = "Set1") +
+  ggtitle("Comparison of TA site saturation of Mtb samples") +
+  ylab("saturation") +
+  theme(axis.title.x = element_blank(), axis.ticks.x = element_blank()) +
+  guides(fill="none") +
+  theme(axis.title.y = element_text(size = 12)) +
+  theme(axis.text.x = element_text(size=10))
+ggsave(here("images/mtb_cumul_density_barplot.png"))
+
+
+```
+
+Correlation between samples
+
+```{r correlation mtb}
+
+library(tidyverse)
+library(here)
+
+mtb_df1 <- readRDS(here("R_data/mtb_invitro_insertions.RData"))
+mtb_data <- pivot_wider(mtb_df1, names_from=sample, values_from = reads) 
+tb_mat <- as.matrix(mtb_data[,2:3])
+cor(tb_mat)
+#0.60 Pearson's correlation coefficient for 22 and 23
+cor.test(tb_mat[,1], tb_mat[,2], method = "pearson")
+#kendall corr coefficient 0.68
+```
+
+
+
+
+
+Run transit HMM
+
+```{bash}
+transit hmm -r Sum mtb22_hiseq_tpp.wig,mtb23_hiseq_tpp.wig ~/Data/mtb_hiseq/mtbH37Rv.prot_table mtb_hiseq_combined.wig 
+```
+
+
+```{R}
+# sum up results file for Transit hmm for new tb hiseq set
+
+hmm_results<-read.delim("~/Data/htm_hiseq/mtb_hiseq_combined_genes.wig", 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+head(hmm_results)
+
+
+# change to just gene and call--will affect downstream plots
+mtb_hmm <- select(hmm_results, 2, 1, 11)
+colnames(mtb_hmm) <- c("gene","ORF", "call")
+
+nrow(mtb_hmm)
+View(mtb_hmm)
+
+#write to .csv for sharon
+write.csv(mtb_hmm, "hiseq_mtb_transit.csv", quote=F)
+```
+
+
+In order to compare calls from two different libraries, and in fact two different 'strains' (bovis vs. tb), need to use resampling method from transit (or other). This is used by Carey et al, 2018 to compare different strains of tb. Tateishi, et al (2020) uses resampling to compare conditions, but then just seems to compare homologous genes in intracellulare with marinum and tb.
+
+Another paper comparing two strains (using TRAdis)
+
+[Barquist et al 2013](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3632133/)
+
+First need to take two prot tables and make new bovis table that has coordinates from mtb (or vice versa) to use for resampling protocol--not sure I need to do this?  Instead will make two prot tables with only orthologous genes (from Malone) and corresponding gene boundaries.
+
+see 'resampling_prot_tables.R'
+
+Run first using sharon's tb data with bovis from inside folder where all these located (~/Data)
+
+```{bash}
+transit resampling mtb_hiseq/TPP/mtb22_hiseq_tpp.wig,mtb_hiseq/TPP/mtb23_hiseq_tpp.wig bovis_hiseq/tpp/bovis_hiseq_tpp_19.wig,bovis_hiseq/tpp/bovis_hiseq_tpp_20.wig,bovis_hiseq/tpp/bovis_hiseq_tpp_21.wig mtbH37Rv.prot_table,bovis_on_tb.prot_table resampling_output.txt
+
+```
+
+Do i need to 1) use locus names for bovis to match tb? no results when I use bovis locus names? 
+Tried this--exchanged bovis locus names for mtb from orthologs list.
+
+2)Do I need to make sure number of entries is the same? There are more in mtb list than orthologs. 
+
+```{R}
+# import results
+resamp_results<-read.delim("~/tn_seq/in_vitro_data/resampling_results/tb_bovis_resampling_output.txt", comment.char = "#", sep="\t", header=F, stringsAsFactors=F)
+head(resamp_results)
+colnames(resamp_results)<-c("Orf","Name",	"Desc",	"Sites", "Mean_Ctrl",
+        "Mean_Exp",	"log2FC",	"Sum_Ctrl",	"Sum_Exp", "Delta_Mean", "p_value",	"Adj_p_value")
+
+signif_10<-resamp_results[which(resamp_results$Adj_p_value<0.10),]
+nrow(signif_10)
+#75
+signif_05<-resamp_results[which(resamp_results$Adj_p_value<0.05),]
+zeros<-signif_05[which(signif_05$Adj_p_value == 0),] #what does zero mean? genes only in tb?
+nrow(zeros)  #29
+nrow(signif_05)
+#62
+# which of these have log fold change >2? (Carey et al)
+#total lfc
+total_lfc<-resamp_results[which(abs(resamp_results$log2FC) > 2.0),]
+nrow(total_lfc)  #773
+lfc_signif<-signif_05[which(abs(signif_05$log2FC) > 2.0),]
+nrow(lfc_signif)
+#57
+```
+
+62 have p-values of < 0.05.
+There are some with p-value of = 0.00000. is this useful?
+57 have significance values of 0.05 and also show log fold difference > 2 (either direction)
+
+
+
+Perhaps better to use DeJesus mtb data. Can I use combined wig? I think this is to 
+compare two libraries, so better to use one library instead of all of them.
+Used library from DeJesus with 67.6% saturation.
+
+```{bash}
+transit resampling Dejesus_wig/SRR411328_1.wig bovis_hiseq/tpp/bovis_hiseq_tpp_19.wig,bovis_hiseq/tpp/bovis_hiseq_tpp_20.wig,bovis_hiseq/tpp/bovis_hiseq_tpp_21.wig mtbH37Rv.prot_table,bovis_on_tb.prot_table dj_resampling_output.txt
+
+```
+
+```{r}
+# import results
+dj_resamp_results<-read.delim("~/Data/dj_resampling_output.txt", comment.char = "#", sep="\t", header=F, stringsAsFactors=F)
+colnames(dj_resamp_results)<-c("Orf","Name",	"Desc",	"Sites", "Mean_Ctrl",
+        "Mean_Exp",	"log2FC",	"Sum_Ctrl",	"Sum_Exp", "Delta_Mean", "p_value",	"Adj_p_value")
+head(dj_resamp_results)
+dj_signif_10<-dj_resamp_results[which(dj_resamp_results$Adj_p_value<0.10),]
+nrow(dj_signif_10)
+#209
+dj_signif_05<-dj_resamp_results[which(dj_resamp_results$Adj_p_value<0.05),]
+nrow(dj_signif_05)
+#162
+# how many zeros?
+zeros<-dj_resamp_results[which(dj_resamp_results$Adj_p_value==0),]
+nrow(zeros) #85
+# which of these have log fold change >2? (Carey et al)
+dj_lfc_signif<-dj_signif_05[which(abs(dj_signif_05$log2FC) > 2.0),]
+nrow(dj_lfc_signif)
+dj_lfc_signif
+#146
+tot_dj_lfc<-dj_resamp_results[which(abs(dj_resamp_results$log2FC) > 2.0),]
+nrow(tot_dj_lfc)
+#581
+```
+
+
+
+Would it be worth running the other way, since Sharon's mtb data is actually lower saturation than bovis? Does it matter which is the control? I just need to create a 'tb_on_bovis' prot table and use with original bovis prot table ('best'). Would be interesting as a control to see if there is any difference. made new table "tb_on_bovis.prot_table" so we can do other way around
+
+```{bash}
+transit resampling bovis_hiseq/tpp/bovis_hiseq_tpp_19.wig,bovis_hiseq/tpp/bovis_hiseq_tpp_20.wig,bovis_hiseq/tpp/bovis_hiseq_tpp_21.wig mtb_hiseq/TPP/mtb22_hiseq_tpp.wig,mtb_hiseq/TPP/mtb23_hiseq_tpp.wig bovis_best.prot_table,tb_on_bovis.prot_table rev_resampling_output.txt
+
+```
+
+```{r}
+# import results
+rev_resamp_results<-read.delim("~/Data/rev_resampling_output.txt", comment.char = "#", sep="\t", header=F, stringsAsFactors=F)
+head(rev_resamp_results)
+colnames(rev_resamp_results)<-c("Orf","Name",	"Desc",	"Sites", "Mean_Ctrl",
+        "Mean_Exp",	"log2FC",	"Sum_Ctrl",	"Sum_Exp", "Delta_Mean", "p_value",	"Adj_p_value")
+
+rev_signif_10<-rev_resamp_results[which(rev_resamp_results$Adj_p_value<0.10),]
+nrow(rev_signif_10)
+#82
+rev_signif_05<-rev_resamp_results[which(rev_resamp_results$Adj_p_value<0.05),]
+#signif_05<-signif_05[which(signif_05$Adj_p_value > 0),] what does zero mean?
+nrow(rev_signif_05)
+#68
+zeros<-rev_resamp_results[which(rev_resamp_results$Adj_p_value==0),]
+nrow(zeros)  #30
+# which of these have log fold change >2? (Carey et al)
+tot_revlfc<-rev_resamp_results[which(abs(rev_resamp_results$log2FC)>2.0),]
+nrow(tot_revlfc)
+#773
+rev_lfc_signif<-rev_signif_05[which(abs(rev_signif_05$log2FC) > 2.0),]
+nrow(rev_lfc_signif)
+#63
+
+```
+
+I'm seeing a slight improvement mapping the tb onto the bovis, but not huge. Perhaps because higher saturation library in bovis, better as 'control'? More statistical power. Same number of genes with log fold change >2.0, just more considered 'signficant' when I use better saturated library as control. May be a bit random with resampling.
+
+
+I'm confused that in the hmm results for the hiseq bovis sample 19, this gene only shows 6 ta sites:
+Mb2204c	 -	NA	6	4	0	2	0	0.1667	284.00	ES
+in the combined file, still only shows 6 TA sites:
+Mb2204c	 -	NA	6	0	0	6	0	0.6667	77.50	NE
+But these are supposedly identical in mbovis and mtb and in prot_table, this is entry:
+1-acylglycerol-3-phosphate O-acyltransferase	2428031	2428774	-	247	CDS	-	 -	Mb2204c
+NA	2428860	2429255	-	247	gene	-	 -	Mb2204c
+
+Which of these boundaries are correct??
+This seems like prot table is wrong for bovis.
+
+Here is from gff:
+LT708304.1	feature	gene	2428031	2428774	.	-	.	locus_tag=BQ2027_MB2204c
+LT708304.1	feature	CDS	2428031	2428774	.	-	0	codon_start=1;db_xref=GOA:A0A1R3Y0H6,InterPro:IPR002123,UniProtKB/TrEMBL:A0A1R3Y0H6;locus_tag=BQ2027_MB2204c;note=Mb2204c%2C -%2C len: 247 aa. Equivalent to Rv2182c%2C len: 247 aa%2C from Mycobacterium tuberculosis strain H37Rv%2C %28100.0%25 identity in 247 aa overlap%29. Probable 1-acylglycerol-3-phosphate O-acyltransferase%2C similar to many e.g. in Streptomyces. Contains PS0
+
+Somehow 'gene' is wrong in prot_table I used to run transit with bovis. I need to run transit again with better prot_table? When creating it somehow got gene boundaries from next gene in row.
+
+```{bash}
+transit hmm -r Sum bovis_hiseq/tpp/bovis_hiseq_tpp_21.wig,bovis_hiseq_tpp_20.wig,bovis_hiseq_tpp_19.wig bovis_best.prot_table hmm2_bovis_hiseq_combo.wig
+```
+
+Won't have to re-run resampling because this is based on insertion plots which are all fine. Tb calls all fine. errors in mbovis calls both at miseq and hiseq.
+
+Now calls make more sense:
+Mb2204c	 -	1-acylglycerol-3-phosphate O-acyltransferase	22	21	0	1	0	0.0455	3.00	ES
+Rv2182c		1-acylglycerol-3-phosphate O-acyltransferase	22	22	0	0	0	0.0000	0.00	ES
+
+
+Looking at riboswitch in bovis/tb: 
+PROBABLE UNIDENTIFIED ANTIBIOTIC-TRANSPORT INTEGRAL MEMBRANE ABC TRANSPORTER	1642648	1643580	-	310	CDS	-	 -	Mb1491c
+antibiotic ABC transporter permease	1641493	1642425	-	311	-	-		Rv1456c	-
+
+
+Mb1491c	 -	PROBABLE UNIDENTIFIED ANTIBIOTIC-TRANSPORT INTEGRAL MEMBRANE ABC TRANSPORTER	15	14	0	1	0	0.1333	104.00	ES
+Rv1456c		antibiotic ABC transporter permease	15	0	0	15	0	0.0667	1395.00	NE
+
+THis is interesting. Is it significant?
+Rv1456c		antibiotic ABC transporter permease	15	46.5	4.6	-3.07	1394.7	208.71	-41.9	0.15300	0.76903  
+Mb1491c	 -	PROBABLE UNIDENTIFIED ANTIBIOTIC-TRANSPORT INTEGRAL MEMBRANE ABC TRANSPORTER	15	4.6	46.5	3.07	208.7	1394.75	41.9	0.15010	0.77414
+
+Not significantly different, though they have a large logfold change.
+
+what about between bovis and dejesus?
+Rv1456c		antibiotic ABC transporter permease	15	34.6	4.6	-2.66	519.5	208.71	-30.0	0.24220	1.00000
+Not significant here either.
+
+Would be a good idea to look at a lower saturation dejesus dataset with resampling to see if the number of significant genes/lfc2 changes
+
+Use SRR411339 and do resampling again. This has saturation of 43% (closer to our mtb library)
+This shows lower saturation leads to fewer significant genes.
+
+```{R}
+# import results
+dj39_resamp_results<-read.delim("~/Data/resampling_results/dj_resampling_439.txt", comment.char = "#", sep="\t", header=F, stringsAsFactors=F)
+head(dj39_resamp_results)
+colnames(dj39_resamp_results)<-c("Orf","Name",	"Desc",	"Sites", "Mean_Ctrl",
+        "Mean_Exp",	"log2FC",	"Sum_Ctrl",	"Sum_Exp", "Delta_Mean", "p_value",	"Adj_p_value")
+
+dj39_resamp_10<-dj39_resamp_results[which(dj39_resamp_results$Adj_p_value<0.10),]
+nrow(dj39_resamp_10)
+#38 
+dj39_resamp_05<-dj39_resamp_results[which(dj39_resamp_results$Adj_p_value<0.05),]
+nrow(dj39_resamp_05)
+#32  
+# which of these have log fold change >2? (Carey et al)
+dj39_lfc_signif<-dj39_resamp_05[which(abs(dj39_resamp_05$log2FC) > 2.0),]
+nrow(dj39_lfc_signif)
+#26 
+# how many total have logfold change >2?
+dj39lf2<-dj39_resamp_results[which(abs(dj39_resamp_results$log2FC) > 2.0),]
+nrow(dj39lf2) #1107
+```
+
+![signif_resampling](~/tn_seq/images/signif_resampling.png)
+
+
+## venn diagram to show if significant genes are same in all datasets
+
+```{R}
+#nrow(rev_lfc_signif)
+#don't use rev because mapped onto bovis, better to compare original mapped onto tb
+nrow(lfc_signif)
+tb_signif<-lfc_signif$Orf
+tb_signif
+#57
+dj_39<-dj39_lfc_signif$Orf
+dj_39
+#26
+# any of these the same?
+u<-NULL
+u<-intersect(tb_signif, dj_39)
+u
+#[1] "Rv0928"  "Rv1286"  "Rv1430"  "Rv1854c" "Rv2222c" "Rv2259"  "Rv2398c" "Rv2937" 
+# [9] "Rv2942"  "Rv3156"  "Rv3490"  "Rv3680"  "Rv3682"
+length(u) #13
+nrow(dj_lfc_signif)
+#146
+q<-intersect(dj_lfc_signif$Orf, dj39_lfc_signif$Orf)
+length(q)
+#22
+
+# intersect all 3
+all<-intersect(q,u)
+#[1] "Rv0928"  "Rv1286"  "Rv1430"  "Rv2222c" "Rv2259"  "Rv2398c" "Rv2937"  "Rv2942" 
+# [9] "Rv3156"  "Rv3490"  "Rv3680"  "Rv3682" 
+length(all)
+#12
+# intersect of ours and most saturated
+x<-intersect(dj_lfc_signif$Orf, tb_signif )
+length(x)
+#36 (out of 57)
+```
+
+12 are in all 3 sets, more found with more saturation.
+
+```{r}
+# devtools::install_github("gaospecial/ggVennDiagram")
+# library("ggVennDiagram")
+# a<-dj_lfc_signif$Orf
+# b<-tb_signif
+# c<-c(dj39_lfc_signif$Orf)
+# x<-list(dj_67=a, hiseq_tb=b, dj_43=c)
+# ggVennDiagram(x) + scale_fill_gradient(low="orange",high = "red")
+
+```
+
+![venn diagram showing overlap of signif/lfc2 orfs in different libraries](~/tn_seq/images/signif_overlaps.png)
+
+
+```{R}
+# plot logfold change in volcano plot
+ggplot(data=resamp_results, aes(x=log2FC, y=-log10(Adj_p_value))) + geom_point()
+
+```
+
+![volcano plot of log fold change with q-values](~/tn_seq/images/resamp_volcano.png)
+
+
+
+Using genes in ortholog list, make table of essentiality calls in mtb/bovis and * which ones are significantly different.
+
+Run a single library of bovis with transit to see if we can trace results. Use MbA021 which corresponds to library 'D'. Density =0.49, 36,021 TAs hit, max count=10,718, NZmean=168.2
+
+```{bash}
+conda activate tnseq
+transit hmm bovis_hiseq/tpp/bovis_hiseq_tpp_21.wig bovis_best.prot_table hmm_bovis_hiseq_21.wig
+```
+
+Run with no normalisation
+
+```{bash}
+transit hmm -n none bovis_hiseq/tpp/bovis_hiseq_tpp_21.wig bovis_best.prot_table hmm_bovis_hiseq_21.wig
+```
+
+
+Compare original hmm results with all three, with just 21:
+395 calls are different.
+
+
+```{r}
+hmm_results<-read.delim("~/Data/hmm2_bovis_hiseq_combo_genes.wig", 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+head(hmm_results)
+
+results_21<-read.delim("~/Data/hmm_bovis_hiseq_21_genes.wig",
+                       sep="\t", header=F, stringsAsFactors = F,
+                       comment.char = "#")
+
+compare_21<-matrix(0, nrow=nrow(hmm_results), ncol=4)
+compare_21[,1]<-hmm_results$V1
+compare_21[,2]<-hmm_results$V11
+compare_21[,3]<-results_21$V11
+compare_21[,4] <- ifelse(compare_21[,2]==compare_21[,3], "yes", "no")
+results_19_21<-read.delim("~/Data/hmm_bovis_add_19_21_genes.wig",
+           sep="\t", header=F, stringsAsFactors = F,
+           comment.char = "#")
+head(results_19_21)
+
+View(compare_21)
+## changes 395 calls
+
+```
+
+What about when we just use 19 and 21--add together first?
+
+make new .wig file with sum of reads from 19 and 21.
+
+```{r}
+wig_19_21<-matrix(0,nrow(b19), 2)
+wig_19_21[,1]<-b19[,1]
+wig_19_21[,2]<-b19[,2] + b21[,2]
+#wig_19_21[10000:10005,]
+#b19[10000:10005,]
+write.table(wig_19_21, "add_19_21.wig", sep="\t", quote = F, row.names = F, col.names = F)
+```
+
+Run transit with single wig that has added counts.
+
+```{bash}
+transit hmm add_19_21.wig bovis_best.prot_table hmm_bovis_add_19_21.wig
+```
+
+Do these change any of the calls from 21 alone?
+
+```{r}
+results_19_21<-read.delim("~/Data/hmm_bovis_add_19_21_genes.wig",
+           sep="\t", header=F, stringsAsFactors = F,
+           comment.char = "#")
+
+compare_21<-matrix(0, nrow=nrow(hmm_results), ncol=4)
+compare_21[,1]<-hmm_results$V1
+compare_21[,2]<-hmm_results$V11
+compare_21[,3]<-results_19_21$V11
+compare_21[,4] <- ifelse(compare_21[,2]==compare_21[,3], "yes", "no")
+
+
+View(compare_21)
+```
+
+215 calls changed when use both datasets added together vs 21 alone. 
+
+New essential file with 19 and 21 added together to give to Sharon?:
+
+```{r}
+new_res_df<-data.frame(results_19_21$V1, results_19_21$V2, results_19_21$V11)
+colnames(new_res_df)<-c("ORF", "name", "call")
+View(new_res_df)
+write.csv(new_res_df, "HMM_sum19_21.csv", quote=F, row.names=F)
+```
+
+
+How did number of unique insertions change (or are different) between dataset 19 and 21?
+
+Total number of unique insertions among 3 ‘samples’ of bovis library:  40482
+Total TA sites in bovis: 73536
+Potential saturation with all 3:  55.1%
+
+Unique insertions sample 21 alone (highest number of insertions):  36021  (49% saturation)
+Unique insertions samples 19 and 21 together: 39987  (54% saturation)
+
+How does this change the calls?
+
+
+```{r}
+#calls for 21 alone, ratio ES/NE
+head(results_21)
+call_ratio_21<-nrow(results_21[which(results_21$V11=="ES"),])/nrow(results_21[which(results_21$V11=="NE"),])
+call_ratio_21
+#0.1641837
+no_ES_21<-nrow(results_21[which(results_21$V11=="ES"),])
+no_ES_21
+#529
+
+#calls for 19 and 21 together
+call_ratio_19_21<-nrow(results_19_21[which(results_19_21$V11=="ES"),])/nrow(results_19_21[which(results_19_21$V11=="NE"),])
+call_ratio_19_21
+#0.1686101
+no_ES_19_21<-nrow(results_19_21[which(results_19_21$V11=="ES"),])
+no_ES_19_21
+#535
+
+# does it change Mb2204c?
+results_19_21[which(results_19_21$V1=="Mb2204c"),]
+#'ES'
+results_21[which(results_21$V1=="Mb2204c"),]
+#'ES'
+```
+
+Transit says that for sparse datasets, you will get too many GD genes. Does this change when we add in 19?
+
+```{r}
+no_GD_19_21<-nrow(results_19_21[which(results_19_21$V11=="GD"),])
+no_GD_21<-nrow(results_21[which(results_21$V11=="GD"),])
+no_GD_19_21
+#176
+no_GD_21
+#201
+```
+Doesn't increase GD, in fact decreases.
+
+Re-run miseq data with fixed prot table
+The saturation levels were very uneven with these--do I run again with normalisation, or add together? Or maybe just use most saturated sample.
+Miseq data bringing up same questions--Only C had reasonable saturation (35.8%) where other two were 21 and 18 percent. 
+
+Find out how many insertions like above.
+
+```{r}
+#load up wig file insertions for bovis
+miB<-read.delim("~/tn_seq/data/miseq_wigs/B_R1.wig", header=T, comment.char = "#", sep=" ")
+miC<-read.delim("~/tn_seq/data/miseq_wigs/G_R1.wig", header=T, comment.char = "#", sep=" ")
+miD<-read.delim("~/tn_seq/data/miseq_wigs/D_R1.wig", header=T, comment.char = "#", sep=" ")
+# ta sites of unique insertions (number of nonzero values in column 2)
+head(miB)
+nz_B<-miB[which(miB$chrom.Mbovis_AF2122_97>0),1]
+length(nz_B)
+#15478 / 73536 0.2104819
+nz_C<-miC[which(miC$chrom.Mbovis_AF2122_97>0),1]
+length(nz_C)/73536
+#26350 0.358
+nz_D<-miD[which(miD$chrom.Mbovis_AF2122_97>0),1]
+length(nz_D)/73536
+#13298 0.181
+
+total_insertion_set<-c(nz_B, nz_C, nz_D)    #not unique
+length(total_insertion_set)
+#55126
+unique_total_insertions<-unique(total_insertion_set)
+length(unique_total_insertions)
+#34178/73536  #0.465 saturation max
+
+#compare improvement with adding 19 and 21
+pair_B_C_insertions<-c(nz_B,nz_C)
+length(unique(pair_B_C_insertions))
+#31359  (0.426 saturation)
+
+pair_C_D_insertions<-c(nz_C, nz_D)
+length(unique(pair_C_D_insertions))
+#30443  (0.414 saturation)
+# (out of total of 73536)
+
+
+```
+Look at insertions for hiseq mtb, as well
+
+```{r}
+#load up wig file insertions for mtb
+hi22<-read.delim("~/Data/mtb_hiseq/TPP/mtb22_hiseq_tpp.wig", header=T, comment.char = "#", sep=" ")
+hi23<-read.delim("~/Data/mtb_hiseq/TPP/mtb23_hiseq_tpp.wig", header=T, comment.char = "#", sep=" ")
+
+# ta sites of unique insertions (number of nonzero values in column 2)
+head(hi22)
+nz_22<-hi22[which(hi22$chrom.Mtb_H37Rv>0),1]
+length(nz_22)
+#26828 / 74604 #0.36
+nz_23<-hi23[which(hi23$chrom.Mtb_H37Rv>0),1]
+length(nz_23)
+#23634 0.317
+
+total_insertion_set<-c(nz_22, nz_23)    #not unique
+length(total_insertion_set)
+#50462
+unique_total_insertions<-unique(total_insertion_set)
+length(unique_total_insertions)
+29919/74604  #0.401 saturation max
+
+#write file of summed 22 + 23 wigs
+options(scipen = 999)
+wig_22_23<-matrix(0,nrow(hi22), 2)
+wig_22_23[,1]<-hi22[,1]
+wig_22_23[,2]<-hi22[,2] + hi23[,2]
+wig_22_23[10000:10005,]
+hi23[10000:10005,]
+hi22[10000:10005,]
+write.table(wig_22_23, "~/Data/add_22_23.wig", sep="\t", quote = F, row.names = F, col.names = F)
+
+```
+
+Re-run transit resampling using 19+21 summed .wig (add_19_21.wig) and summed mtb .wigs (add_22_23.wig)
+
+Had to add header to .wig and also disable scientific notation
+
+```{bash}
+transit resampling add_19_21.wig add_22_23.wig bovis_best.prot_table,tb_on_bovis.prot_table sums_hiseq_resampling_output.txt
+```
+
+Create volcano plot
+```{r}
+library(ggplot2)
+library(tidyverse)
+# drag in resampling results
+# import results
+sums_resamp_results<-read_delim("~/tn_seq/in_vitro_data/resampling_results/sums_hiseq_resampling_output.txt", comment = "#", delim="\t", col_names =F, skip=3)
+colnames(sums_resamp_results)<-c("Orf","Name",	"Desc",	"Sites", "Mean_Ctrl",
+        "Mean_Exp",	"log2FC",	"Sum_Ctrl",	"Sum_Exp", "Delta_Mean", "p_value",	"Adj_p_value")
+
+data <- sums_resamp_results %>% mutate(signif = ifelse(Adj_p_value < 0.05, "sig", "ns")) 
+
+data$Adj_p_value[data$Adj_p_value==0] <- 0.00001
+data$p_value[data$p_value==0] <- 0.00001
+
+# plot logfold change in volcano plot
+p<-ggplot(data=data, aes(x=log2FC, y=-log10(Adj_p_value), colour=signif)) +
+  geom_point(na.rm=T) + ylim(0,5)
+  
+p
+ggsave("~/Data/resampling_results/tb_sum_volcano.png", p, height = 4, width = 4)
+```
+
+
+Run again against best DeJesus, but using sum 19+21 this time
+
+```{bash}
+transit resampling add_19_21.wig Dejesus_wig/SRR411328_1.wig bovis_best.prot_table,tb_on_bovis.prot_table resampling_output_16_03.txt
+```
+
+
+```{r}
+library(ggplot2)
+# drag in resampling results
+# import results
+dj67_resamp_results<-read.delim("~/Data/resampling_results/resampling_output_16_03.txt", comment.char = "#", sep="\t", header=F, stringsAsFactors=F)
+colnames(dj67_resamp_results)<-c("Orf","Name",	"Desc",	"Sites", "Mean_Ctrl", "Mean_Exp",	"log2FC",	"Sum_Ctrl",	"Sum_Exp", "Delta_Mean", "p_value",	"Adj_p_value")
+
+# plot logfold change in volcano plot
+dj<-ggplot(data=dj67_resamp_results, aes(x=log2FC, y=-log10(Adj_p_value))) + geom_point(na.rm=T) + ylim(0,3)
+dj
+ggsave("~/Data/resampling_results/dj67_volcano.png", width=4, height = 4)
+```
+
+
+
+Re-run Transit HMM on Miseq data (sample C only) with correct prot table to see if it is any different.
+
+"Finally (ish) when you get a chance would we be able to run the MiSEQ data with the right  prot table? I am curious to see the impact on the list - i.e. if Mb2204c maintains its NE status in this dataset. Which - interestingly was largely based on sample 20 (sequenced the best last time - but didn't sequence this time)."
+
+
+```{bash}
+transit hmm miseq_wigs/G_R1.wig bovis_best.prot_table hmm_miseq_new
+```
+
+
+Where are the gaps in the insertions in the bovis and tb libraries? List all gaps where >100 consecutive positions with zero insertions (this is equivalent to how many TA sites? TA site approx every 4349904/73536=59 nt). so approx 5900 bp gap.
+
+```{r insertion_gaps}
+#load up wig file insertions for bovis
+b19<-read.delim("~/tn_seq/in_vitro_data/bovis_hiseq/tpp/bovis_hiseq_tpp_19.wig", header=T, comment.char = "#", sep=" ")
+b20<-read.delim("~/tn_seq/in_vitro_data/bovis_hiseq/tpp/bovis_hiseq_tpp_20.wig", header=T, comment.char = "#", sep=" ")
+b21<-read.delim("~/tn_seq/in_vitro_data/bovis_hiseq/tpp/bovis_hiseq_tpp_21.wig", header=T, comment.char = "#", sep=" ")
+
+b21[310:320,]
+insertions<-b19[,2]
+insertions_df<-cbind(insertions, b20[,2], b21[,2])
+head(insertions_df)
+
+totals<-rowSums(insertions_df[, c(1, 3)])
+head(totals)
+
+# sum insertions into one df
+positions<-b19[,1]
+mb_ins_df<-data.frame(positions, totals)
+#mb_ins_df<-cbind(positions, totals)
+colnames(mb_ins_df)<-c("positions", "insertions")
+head(mb_ins_df)
+nrow(mb_ins_df)
+
+tb<-read.delim("~/Data/add_22_23.wig", header=T, sep="\t", skip=2)
+tb_ins<-data.frame(tb[,1], tb[,2])
+colnames(tb_ins)<-c("positions", "insertions")
+
+# where is max insertion position
+max(mb_ins_df$insertions)
+mb_ins_df[which.max(mb_ins_df[,2]),]
+
+max(tb_ins$insertions)
+#2056
+tb_ins[which.max(tb_ins[,2]),]
+#1175311	
+
+count<-0
+long<-NULL
+for (i in 1:nrow(mb_ins_df)){
+  if (mb_ins_df$insertions[i] == 0){
+    count<-count+1
+  }else{
+    if (count>90){
+      long<-c(long, rownames(mb_ins_df)[i])
+      count<-0
+    }else{
+      count<-0
+    }
+  } 
+}
+long
+# long gaps in tb
+
+count<-0
+long_tb<-NULL
+for (i in 1:nrow(tb_ins)){
+  if (tb_ins$insertions[i] == 0){
+    count<-count+1
+  }else{
+    if (count>100){
+      long_tb<-c(long_tb, rownames(tb_ins)[i])
+      count<-0
+    }else{
+      count<-0
+    }
+  } 
+}
+long_tb
+# end positions of gaps longer than 100 TA sites
+mb_ins_df[long,]
+tb_ins[long_tb,]
+
+```
+
+Gaps of >100 TA sites in bovis:
+(checked and threshold of >90 doesn't change results)
+343084-357910 = 14,826
+807982-801766 = 6,216
+1454144-1448969 = 5,175
+1479475-1474045 = 5,430
+
+
+gaps of >100 TA sites in tb:
+(7)
+342082-351473 (9391) (eccA3,B3,C3, PE5, PPE4)
+799998-806159	 (6161) (rps and rpl genes)
+1446511-1453029	(6518) (argS, lysA, thrACB)
+1471642-1476251	(4609) (ribosomal rna)
+1552610-1561266 (8656) (pyrR,B,C,F,carA,B,Rv1382)
+1646223-1652592	(6369) (various genes)
+4238041-4245025	(6984) (aftA, embC, embA)
+
+Look at these on artemis. Why are there such big gaps here?
+Sharon looked and they are all functionally related genes:
+1) ESS genes, type VII secretion system
+
+```{r summarise_bovis_calls, message=FALSE}
+# results file for Transit hmm
+
+hmm_results<-read.delim("~/tn_seq/in_vitro_data/hmm_bovis_add_19_21_genes.wig", sep="\t", header=FALSE, stringsAsFactors=F, skip=6)
+library(dplyr)
+# change to just gene and call--will affect downstream plots
+bovis_hmm <- select(hmm_results, 2, 1, 11)
+colnames(bovis_hmm) <- c("gene","ORF", "call")
+# have to trim whitespace before gene to compare with mtb
+bovis_hmm$gene<-trimws(bovis_hmm$gene)
+#remove tRNAs (always essential?) and any extraneous text after ORF
+bovis_hmm <- bovis_hmm %>% filter(grepl('Mb', ORF))
+bovis_hmm$ORF <- gsub('\\s.*', "", bovis_hmm$ORF)
+
+length(bovis_hmm$call)
+#4025 (3974 without tRNAs)
+essential_genes_hmm <- bovis_hmm[bovis_hmm$'call' == 'ES',2]
+#sort(essential_genes_hmm)
+length(essential_genes_hmm)
+#534 (526 without tRNAs)
+gd_genes <- bovis_hmm[bovis_hmm$'call' == 'GD',2]
+length(gd_genes)
+#175
+ga_genes <- bovis_hmm[bovis_hmm$'call' == 'GA',2]
+length(ga_genes)
+#134 (now 131 without tRNAs)
+non_ess_genes <- bovis_hmm[bovis_hmm$'call' == 'NE',2]
+length(non_ess_genes)
+#3173 (now 3136?)
+
+calls<-c("ES", "GD", "NE", "GA")
+#number<-c(534,175,3173,134)
+number <- c(length(essential_genes_hmm), length(gd_genes),  length(non_ess_genes),length(ga_genes))
+calls_bovis<-data.frame(calls,number)
+# change to factor to keep order
+calls_bovis$calls<-factor(calls_bovis$calls, c("ES", "GD", "NE", "GA"))
+head(calls_bovis)
+
+library(ggplot2)
+plot.new()
+p_bovis <-ggplot(data=calls_bovis, aes(x=calls, y=number)) +
+  geom_col(width=0.5, color="blue", fill="blue") +
+  ggtitle(label=c("essentiality calls M.bovis")) +
+  ylab("number of genes")+
+  theme(axis.title.x = element_blank()) +
+  ylim(0,3500)
+p_bovis
+ggsave("~/Data/bovis_calls_barplot.png", p, width=4, height = 4, units="in")
+
+```
+
+
+Re-run transit with added up mtb files instead of using both as replicates (add_22_23.wig). Had done this for resampling, but not for plain comparisons.
+
+
+```{bash}
+transit hmm add_22_23.wig mtbH37Rv.prot_table hmm_mtb_add_22_23.wig
+```
+
+
+
+```{r summarise_tb_calls, message=FALSE}
+# results file for Transit hmm hiseq data for mtb
+library(dplyr)
+
+hmm_results<-read.delim("~/tn_seq/in_vitro_data/hmm_mtb_add_22_23_genes.wig", sep="\t", header=FALSE, stringsAsFactors=F, skip=6)
+# change to just gene and call--will affect downstream plots
+mtb_hmm1 <- select(hmm_results, 2, 1, 11)
+colnames(mtb_hmm1) <- c("gene","ORF", "call")
+
+# have to trim whitespace before gene to compare
+mtb_hmm1$gene<-trimws(mtb_hmm1$gene)
+#remove tRNAs (always essential) and any extraneous text after ORF
+mtb_hmm <- mtb_hmm1 %>% filter(grepl('Rv', ORF, ignore.case = T))
+mtb_hmm$ORF <- gsub('\\s.*', "", mtb_hmm$ORF)
+length(mtb_hmm$call)
+#3904
+mtb_essential_genes<- mtb_hmm[mtb_hmm$'call' == 'ES',2]
+#sort(essential_genes_hmm)
+length(mtb_essential_genes)
+#478
+mtb_gd_genes <- mtb_hmm[mtb_hmm$'call' == 'GD',2]
+length(mtb_gd_genes)
+#175
+mtb_ga_genes <- mtb_hmm[mtb_hmm$'call' == 'GA',2]
+length(mtb_ga_genes)
+#2
+mtb_non_ess_genes <- mtb_hmm[mtb_hmm$'call' == 'NE',2]
+length(mtb_non_ess_genes)
+#3242
+calls<-c("ES", "GD", "NE", "GA")
+number<-c(478,175,3242,2)
+calls_mtb<-data.frame(calls,number)
+# change to factor to keep order
+calls_mtb$calls<-factor(calls_mtb$calls, c("ES", "GD", "NE", "GA"))
+head(calls_mtb)
+
+library(ggplot2)
+tb<-ggplot(data=calls_mtb, aes(x=calls, y=number)) +
+  geom_col(width=0.5, color="green", fill="green") +
+  ggtitle(label=c("essentiality calls M.tb"))+
+  ylab("number of genes")+
+  theme(axis.title.x = element_blank()) +
+  ylim(0,3500)
+tb
+ggsave("~/Data/mtb_calls_barplot.png", tb, width=4, height = 4, units="in")
+
+library(gridExtra)
+pl <- grid.arrange(p_bovis, tb, ncol=2)
+ggsave(here("images/calls_barplot.png"), pl)
+```
+
+Compare number orthologous essential genes shared between bovis and tb in venn diagram
+
+```{r compare_ess_genes, message=F}
+#only comparing orthologous genes 
+#library("ggVennDiagram")
+library(VennDiagram)
+library(dplyr)
+library(ggplot2)
+
+compare_table<-read.csv("~/tn_seq/in_vitro_data/hiseq_ess_calls_11_03_21.csv", header=T)
+View(compare_table)
+#4027
+#remove tRNAs (always essential?) and any extraneous text after ORF
+compare_table <- compare_table %>% filter(grepl('Mb', Bovis.ORF))
+#3976
+compare_table$Bovis.ORF <- gsub('\\s.*', "", compare_table$Bovis.ORF)
+bovis_ess<-compare_table[which(compare_table$Bovis.call=="ES"), 1]
+length(bovis_ess)
+
+mtb_ess<-compare_table[which(compare_table$TB.call=="ES"), 1]
+length(mtb_ess)
+
+
+
+a<-bovis_ess
+b<-mtb_ess
+
+x<-list(M.bovis=a, M.tb=b)
+#vd<-ggVennDiagram(x, label_alpha=0) + scale_fill_gradient(low="pink",high = "blue") + theme(text = element_text(size=20), legend.position="None")
+#vd
+#ggsave("~/Data/venn_bovis_tb_hiseq.png", vd, width=4, height = 4)
+my_file = "~/tn_seq/images/venn_compare2.png"
+venn.diagram(x, filename=my_file,
+             category.names=c("M.bovis (527)", "M.tb (457)"),
+             output = TRUE,
+              imagetype = "png",
+              col = c('#440154ff', '#21908dff'),
+              fill = c(alpha("#440154ff",0.3), alpha('#21908dff',0.3)),
+              cat.cex = 0.8,
+          cat.default.pos = "outer",
+          cat.pos = c(-27, 27),
+          cat.dist = c(0.055, 0.055),
+          cat.fontfamily = "sans",
+          cat.col = c("#440154ff", '#21908dff')
+                       )
+
+```
+I might want to normalise data with beta-geom before resampling. can create BG-corrected .wig files by using normalize command and -n betageom
+
+```{bash}
+# example
+transit normalize Rv_1_H37RvRef.wig Rv_1_H37RvRef_BG.wig -n betageom
+```
+
+or can specify normalisation in resampling command:
+
+```{bash}
+#example
+transit resampling <comma-separated .wig control files> <comma-separated .wig experimental files> <annotation .prot_table or GFF3> <output file> -n betageom
+```
+
+in this case will i need to remove outliers first?
+
+
+There is some confusion about some missing calls in comparison spreadsheet made with hiseq_compare.R. This uses ortholog dataframe made in tnsep_compare.R. This was based off of mbovis orfs, but had just eliminated the duplicates. This led to missing gene calls for tb. Need to use unique gene pairs instead of just using bovis orfs and then searching for tb orfs that match in the list (because there are more than one).
+
+I was looking at my code for the original comparison spreadsheet and that used the excel spreadsheet of ortholog pairs Irilenia (mb_mtb_orthologs_1.txt) generated in september. But when Sharon and Amanda found a bunch of missing calls for tb on monday, I found that that ortholog file was missing those genes, but there were entries for them in the original supp file from malone. So I started from scratch with the suppl file, and then ended up with some difficulties with the redundant pairs.
+
+irilenia's file: 3813 vs original: 3999
+
+But the original will have some redundancies. Maybe see if I can get all pairs without missing the chunk?
+
+
+```{r comparing_orthologs}
+library(dplyr)
+# bovis transit results for samples 19 and 21 added together
+hmm_results<-read.delim("~/Data/hmm_bovis_add_19_21_genes.wig", 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+# change to just gene and call--will affect downstream plots
+bovis_hmm <- select(hmm_results, 2, 1, 11)
+colnames(bovis_hmm) <- c("gene","ORF", "call")
+nrow(bovis_hmm)
+#4027 (same as lines in prot_table)
+#tb transit results for samples 22 and 23 added together
+mtb_results<-read.delim("~/Data/hmm_mtb_add_22_23_genes.wig", 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+# change to just gene and call--will affect downstream plots
+mtb_hmm <- select(mtb_results, 2, 1, 11)
+colnames(mtb_hmm) <- c("gene","ORF", "call")
+nrow(mtb_hmm)
+#3906 (same as lines in prot_table)
+
+# create dataframe with orthologs and calls from each
+# unique gene pairs tb/bovis
+malone_df<-read.delim("~/tn_seq/data/Malone_orthologs.csv", sep=",", header=FALSE, stringsAsFactors=F, skip=3)
+View(malone_df)
+orthologs<-select(malone_df, 2,3,4,6,11)
+colnames(orthologs)<-c("TB_orf", "Bovis_orf", "gene", "func_cat", "i/v")
+View(orthologs)
+orf_pairs<-paste(orthologs$TB_orf, orthologs$Bovis_orf, "/")
+length(orf_pairs) #3999
+orf_pairs<-unique(orf_pairs)
+length(orf_pairs) #3999
+# all pairs are unique
+
+# make dataframe using orfs from orthologs and then look up calls. this will have some orfs listed twice, but in different pairs.
+
+# make table with orf names, calls in bovis and mtb
+comp_calls<-as.data.frame(matrix(0, nrow = nrow(orthologs), ncol = 7))
+colnames(comp_calls)<-c("bovis_orf", "bovis_call", "tb_orf", "tb_call", "gene", "v/i", "func_cat")
+
+comp_calls$bovis_orf  <- orthologs$Bovis_orf
+comp_calls$tb_orf     <- orthologs$TB_orf
+comp_calls$gene       <- orthologs$gene
+comp_calls$`v/i`      <- orthologs$`i/v`
+comp_calls$func_cat   <- orthologs$func_cat
+View(comp_calls)
+
+for (i in 1:nrow(comp_calls)){
+  if (comp_calls$bovis_orf[i] %in% bovis_hmm$ORF){
+    comp_calls$bovis_call[i] <- bovis_hmm[which(bovis_hmm$ORF == comp_calls$bovis_orf[i]),3]
+  }else{
+    comp_calls$bovis_call[i] <- "N/A"
+    }
+  if (comp_calls$tb_orf[i] %in% mtb_hmm$ORF){
+    comp_calls$tb_call[i] <- mtb_hmm[which(mtb_hmm$ORF == comp_calls$tb_orf[i]),3]
+  }else{
+    comp_calls$tb_call[i] <- "N/A"
+    }
+}
+nrow(comp_calls)
+# sub "" for 0 in gene column
+comp_calls[comp_calls == 0] <- ""
+View(comp_calls)
+
+#sorted_comp_calls<-order()
+
+#save file
+write.table(comp_calls, "~/Data/31_03_21_orth_mb_tb.txt", quote=F, sep="\t", row.names = F, col.names = T)
+
+# how many 'N/A'?
+na<-comp_calls[comp_calls$bovis_call=="N/A",]
+nrow(na) #20
+na_tb<-comp_calls[comp_calls$tb_call=="N/A",]
+nrow(na_tb)
+#118
+
+```
+
+
+I checked this over with last sheet and with original--looks cohesive. Zeros in last sheet were due to no orthologs in TB. Saved an excel version in case anyone wants it.
+
+1 April
+Using circos_plots.R to make circos insertion plots. No problem adapting one Irilenia did on bovis. finding it difficult for tb--makes two sectors of whole genome in one circle. I think it may be my bedfile, as it is the only thing different between two?
+
+Make new bedfile from gff
+```{bash}
+gff2bed < MtbH37RvNC_000962.3.gff > MtbH37RvNC_000962_3.bed
+
+```
+
+
+```{r circos_insertions_data}
+install.packages("circlize")
+setwd("~/Data")
+library(circlize)
+library(dplyr)
+# make another for tb
+
+
+# make a new .bed file for tb
+#gff2bed < MtbH37RvNC_000962.3.gff > MtbH37RvNC_000962_3.bed
+
+tb.wig <- read.table(file="add_22_23.wig", header = FALSE, sep="\t", skip =2)
+tb_df <- cbind(tb.wig[,1],tb.wig) #adds extra column with dupl position for start and end
+head(tb_df)
+colnames(tb_df) <- c("start","end", "value")
+tb_df$logvalue <- log10((tb_df$value+0.01))
+quantile(tb_df[,3])
+tb_ymax.f <- quantile(tb_df[,3], probs=c(0.9))
+# replace max value in insertions by 90% quartile
+tb_df$value <- ifelse(tb_df$value>tb_ymax.f,tb_ymax.f,tb_df$value)
+quantile(tb_df[,3])
+tb_ymax.f
+
+#read in the genes from the bed file 
+beddata_tb<- read.delim(file="~/git/mtb_modules/ref_seqs/MtbH37RvNC_000962_3.bed", header=FALSE, sep="\t")
+colnames(beddata_tb)[1] <- "chr"
+head(beddata_tb)
+
+numgenes <- dim(subset(beddata_tb, beddata_tb[,3] < mtb_region.size))[1]
+numgenes   # number of genes in region
+endregion <- dim(subset(tb_df, tb_df[,2]< mtb_region.size))[1]
+endregion  # number of ta sites in region
+
+# make another track inside to label gaps in coverage (pos=0 for >100 conseq)
+#find gaps for tb
+#342082-351473 
+#799998-806159	 (6161) 
+#1446511-1453029	(6518) (argS, lysA, thrACB)
+#1471642-1476251	(4609) (ribosomal rna)
+#1552610-1561266 (8656) (pyrR,B,C,F,carA,B,Rv1382)
+##1646223-1652592	(6369) (various genes)
+#4238041-4245025
+start_tb<-c(342082,799998,1446511,1471642,1552610,1646223,4238041)
+end_tb<-c(351473,806159, 1453029, 1476251,1561266,1652592, 4245025)
+mid_tb<-(end_gaps-start_gaps)/2+start_gaps
+name_tb<-c("a","b","c","d","e","f","g")
+gap_tb<-data.frame(start_tb, end_tb, name_tb)
+gap_tb
+```
+
+```{r circos_plot}
+circos.clear()
+
+mtb_genome <- c("NC_000962.3")
+#mtb_region.size <- 10000  #test size
+mtb_region.size <- 4411532
+
+png("tb_circos.png", width = 960, height=960)
+#1) initialize circos plot
+circos.initialize(sectors=beddata_tb[1:numgenes,"chr"], xlim=c(0,mtb_region.size))
+#2) create plot sectors
+circos.trackPlotRegion(factors=beddata_tb[1:numgenes,"chr"], 
+                       ylim=c(0,300), 
+                       track.height = 0.3,
+                       panel.fun=function(x,y){
+                         circos.genomicLines(region=tb_df[1:endregion,1:2], 
+                                             value=tb_df[1:endregion,], 
+                                             numeric.column=3, 
+                                             type = "h",
+                                             col="green")
+                         circos.yaxis(labels.cex=0.75)
+                       })
+#3) make axis of genome nt                      
+circos.genomicAxis(
+  h = "top",
+  major.at = NULL,
+  labels = NULL,
+  major.by = NULL,
+  tickLabelsStartFromZero = TRUE,
+  labels.cex = par("cex"),
+  sector.index = get.current.sector.index(),
+  track.index = get.current.track.index())
+#4) plot rectangles where gaps in coverage exceed 100 TA sites
+circos.genomicTrackPlotRegion(beddata_tb[1:numgenes,], ylim=c(0,1), track.height= 0.1,
+                              panel.fun=function(x,y, ...){
+                                chr = get.cell.meta.data("sector.index")
+                                xlim1 = gap_tb[,1]
+                                xlim2 = gap_tb[,2]
+                                ylim = get.cell.meta.data("ylim")
+                                circos.rect(xlim1, 0, xlim2, 0.9, col="gray")
+                                circos.text(mid_tb, -0.5, name_tb, niceFacing=T, cex=0.75)
+                              }
+)
+dev.off()
+
+```
+
+Need to run the cattle libraries through transit pipeline
+See notebook: cattle_passage_tnseq
+
+Looked at how eliminating 'non-permissive' TA sites entirely will affect gene calls in tb (not as straightforward to do in bovis because positions will be different). Carey and Mendum do this--eliminate sites before resampling analysis, but for purposes of comparison with resampling, why does it matter if sites are there, if you are looking for log-fold change between the two? In terms of essentiality, DeJesus, et al, add to HMM code to consider different likelihood of insertion in non-permissive sites--they don't remove them from analysis.
+
+>Geometric distributions, conditioned on the local sequence (i.e., matching the NP motif or not), were used to assess the likelihood of observing a read count from a given state
+
+So it seems like removing them isn't entirely useful?
+Could see if it changes the actual calls with removing them, but is that more accurate?
+Used file of np sites from DeJesus suppl file and python script to remove np positions from .wig file to make new wig file: perm_add_22_23.wig
+
+```{python non_permissive_check}
+#!/usr/bin python3
+# coding=utf-8
+
+# non_permissive.py
+# script to eliminate non-permissive TA sites in TB genome (using list from DeJesus)
+# and in bovis genome (need to find motifs?)
+
+
+#**********************************************************************************
+
+def open_ta_list(file):
+    """
+    Read the .csv file of non-permissive sites and make into list of non-permissive TA sites.
+
+    Input                   file            file of non-perm sites
+    Output                  np_sites        list of non-perm sites
+
+    """
+
+    import pandas as pd
+
+    df = pd.read_csv(file, header=1, low_memory=False)
+    df = df[['Coordinate','Matches Non Permissive Motif']]
+    np_sites = []
+    for i in range(len(df)):
+        if df['Matches Non Permissive Motif'][i] == True:
+            np_sites.append(df['Coordinate'][i])
+
+    return(np_sites)
+
+###################################################################################
+def remove_np_sites(wig_file, np_sites):
+    """
+    Open .wig file of insertion sites, delete non-permissive sites, save new .wig file
+
+    Input               wig_file            file of insertion sites (two columns, position/no insertions)
+                        np_sites            python list of positions of non-permissive sites
+    Output              new_wig_file        new file of insertion sites (all permissive)
+
+    """
+    import pandas as pd
+    import os
+
+    # open file and record comment line
+    f = open(os.path.expanduser(wig_file), 'r')
+    comment = f.readline()
+    df = pd.read_csv(wig_file, comment="#", sep=" ", header=0)
+    f.close()
+    # create name of new file
+    new_filename = wig_file.split("/")[-1]
+    new_wig_file = "~/Data/perm_" + new_filename
+    # open outfile and put in comment
+    outfile = open(os.path.expanduser(new_wig_file), 'w')
+    outfile.write(comment)
+    # find sites not in non-permissable list and write to outfile
+    perm_sites = df[~df['variableStep'].isin(np_sites)]
+    perm_sites.to_csv(outfile, index=False, sep=' ')
+    outfile.close()
+
+    return outfile
+
+###################################################################################
+
+def find_np_sites(motif, fasta):
+    """ Use motif finder to find all non-permissive TA sites in specified genome
+    Input       motif               motif for non-permissive sites
+                fasta               fasta file for specified genome
+    Output      np_sites            list of non-permissive positions
+
+    """
+    import os
+    from Bio import SeqIO
+    from Bio import SeqUtils
+
+    fasta_file = os.path.expanduser(fasta)
+    for record in SeqIO.parse(fasta_file, "fasta"):
+        search_seq = str(record.seq)
+
+    matches = SeqUtils.nt_search(search_seq.upper(), motif)
+    # add one to each position to make index=1
+    indexed_positions = []
+    for i in range(1,len(matches)):
+        new_position = matches[i] + 1
+        indexed_positions.append(new_position)
+
+    return indexed_positions
+
+###################################################################################
+
+def test_tb():
+
+    no_sites=open_ta_list('~/tn_seq/data/dejesus/supp_2_non-permissive.csv')
+
+    print(len(no_sites))
+
+    a = remove_np_sites('~/Data/Dejesus_wig/SRR411328_1.wig', no_sites)
+
+    print(a)
+
+#**********************************************************************************
+
+def test_fasta():
+    test_seq = 'GATATATGCATATACTATT'
+    test_motif = 'TAN'
+    np_motif = 'GNTANC'
+    np_motif_med = 'SGNTANCS'
+    np_motif_long = 'GCGNTANCGC'
+    # this isn't bovis fasta--is also h37Rv!
+   # bovis_fasta = "~/Mycobacteria_project/ref_seqs/fasta_files/AL123456.3.fasta"
+    tb_fasta = "~/git/mtb_modules/ref_seqs/Mtb_H37Rv.fasta"
+    # create list of non-permissive positions
+    no_sites = find_np_sites(np_motif_med, bovis_fasta)
+    print(len(no_sites))
+
+    new_file = remove_np_sites('~/Data/add_19_21.wig', no_sites)
+    print(new_file)
+
+########## main ###################################################################
+
+if __name__ == "__main__":
+
+   test_tb()
+
+
+```
+
+Kind of weird, over 6000 non-permissive sites listed in csv from dejesus--manual motif search of fasta only returned 2528 in bovis. Not sure how they calculated non-permissive sites in dejesus.
+
+They say "Two-thirds of the TA sites in the nonpermissive set (1,223/1,746) match the se-
+quence pattern (GC)GNTANC(GC)...Over the whole genome, 6,659 of 74,602 sites (9%) match the nonpermissive sequence pattern."
+
+When I run with whole pattern: GCGNTANCGC, I only find 259 in bovis. with only GNTANC I find 12739. with CGNTANCG I find 2528. What exactly did they use?
+
+If I use 'SGNTANCS' in tb fasta I get 6657, which is pretty close. (I wonder if I really used bovis fasta? I think I mistakenly used another h37rv fasta. Use correct fasta and get 6605 for bovis, 18.08.21)
+
+```{r check_np_sites}
+np_sites <- read.csv("~/tn_seq/data/dejesus/supp_2_non-permissive.csv", skip=1)
+nrow(np_sites)
+#74602
+nrow(np_sites[which(np_sites$Matches.Non.Permissive.Motif == "TRUE"),])
+#6659
+```
+
+
+Run transit HMM to compare
+
+```{bash message=F}
+transit hmm perm_add_22_23.wig ~/Data/mtb_hiseq/mtbH37Rv.prot_table perm_mtb_hiseq_combined.wig 
+```
+
+Compare numbers of essential genes? calls of specific genes?
+
+```{r compare_perm_nonperm_tb}
+results_perm<-read.delim("~/Data/perm_mtb_hiseq_combined_genes.wig",
+           sep="\t", header=F, stringsAsFactors = F,
+           comment.char = "#")
+res_np_incl<-read.delim("~/Data/hmm_mtb_add_22_23_genes.wig",
+           sep="\t", header=F, stringsAsFactors = F,
+           comment.char = "#")
+
+compare_perm<-matrix(0, nrow=nrow(results_perm), ncol=4)
+compare_perm[,1]<-results_perm$V1
+compare_perm[,2]<-results_perm$V11
+compare_perm[,3]<-res_np_incl$V11
+compare_perm[,4] <- ifelse(compare_perm[,2]==compare_perm[,3], "yes", "no")
+
+changed<-compare_perm[which(compare_perm[,4]=="no"),]
+nrow(changed)
+```
+This changes no gene calls.
+
+Do same for bovis:
+
+```{r compare_perm_nonperm_bovis}
+results_perm<-read.delim("~/Data/perm_bovis_hiseq_combined_genes.wig",
+           sep="\t", header=F, stringsAsFactors = F,
+           comment.char = "#")
+res_np_incl<-read.delim("~/Data/hmm_bovis_add_19_21_genes.wig",
+           sep="\t", header=F, stringsAsFactors = F,
+           comment.char = "#")
+
+compare_perm<-matrix(0, nrow=nrow(results_perm), ncol=4)
+compare_perm[,1]<-results_perm$V1
+compare_perm[,2]<-results_perm$V11
+compare_perm[,3]<-res_np_incl$V11
+compare_perm[,4] <- ifelse(compare_perm[,2]==compare_perm[,3], "yes", "no")
+
+changed_bovis<-compare_perm[which(compare_perm[,4]=="no"),]
+nrow(changed_bovis)
+```
+Nothing changes for bovis, either.
+
+Check resampling results with new wig files?
+
+```{bash}
+transit resampling perm_add_19_21.wig perm_add_22_23.wig bovis_best.prot_table,tb_on_bovis.prot_table perm_hiseq_resampling_output.txt
+```
+
+Compare results of this to last resampling between in-house bovis and tb libraries:
+
+```{r check_np_removed_resampling_bovis_tb}
+sums_resamp_results<-read.delim("~/Data/sums_hiseq_resampling_output.txt", comment.char = "#", sep="\t", header=F, stringsAsFactors=F)
+colnames(sums_resamp_results)<-c("Orf","Name",	"Desc",	"Sites", "Mean_Ctrl",
+        "Mean_Exp",	"log2FC",	"Sum_Ctrl",	"Sum_Exp", "Delta_Mean", "p_value",	"Adj_p_value")
+perm_resamp_results<-read.delim("~/Data/perm_hiseq_resampling_output.txt", comment.char = "#", sep="\t", header=F, stringsAsFactors = F)
+colnames(perm_resamp_results)<-colnames(sums_resamp_results)
+
+perm_resamp_05<-perm_resamp_results[which(perm_resamp_results$Adj_p_value<0.05),]
+nrow(perm_resamp_05)
+#9
+# which of these have log fold change >2? (Carey et al)
+perm_lfc_signif<-perm_resamp_05[which(abs(perm_resamp_05$log2FC) > 2.0),]
+perm_lfc_signif
+
+resamp_05<-sums_resamp_results[which(sums_resamp_results$Adj_p_value<0.05),]
+nrow(resamp_05)
+#11
+resamp_lfc_signif<-resamp_05[which(abs(resamp_05$log2FC) > 2.0),]
+resamp_lfc_signif
+
+missing<-resamp_lfc_signif[!(resamp_lfc_signif$Orf %in% perm_lfc_signif$Orf),1]
+missing
+#"Mb0835" "Mb1317" are now NOT significant after nonpermissive sites removed (0.06)
+
+```
+Shows 2 fewer genes with significant log fold change >2 . What about comparing with DeJesus67? will have to remove the non-permissive sites from here, as well. (SRR411328_1.wig)
+
+new wig: Data/perm_SRR411328_1.wig
+
+```{bash}
+transit resampling perm_add_19_21.wig perm_SRR411328_1.wig bovis_best.prot_table,tb_on_bovis.prot_table perm_dj67_resampling_output.txt
+
+
+transit resampling add_19_21.wig ~/Data/Dejesus_wig/SRR411328_1.wig bovis_best.prot_table,tb_on_bovis.prot_table dj67_on_bovis_resampling_output.txt
+```
+
+Compare calls between resampled 67% dejesus and bovis summed 19_20 wig, mapped on bovis:
+
+```{r check_deleted_npsites_resampling_dj67}
+
+dj67_resamp_results<-read.delim("~/Data/dj67_on_bovis_resampling_output.txt", comment.char = "#", sep="\t", header=F, stringsAsFactors=F)
+colnames(dj67_resamp_results)<-colnames(perm_resamp_results)
+head(dj67_resamp_results)
+dj_signif_05<- dj67_resamp_results[which(dj67_resamp_results$Adj_p_value<0.05),]
+nrow(dj_signif_05)
+#97
+perm_dj_resamp_results<-read.delim("~/Data/perm_dj67_resampling_output.txt", comment.char = "#", sep="\t", header=F, stringsAsFactors=F)
+colnames(perm_dj_resamp_results) <- colnames(dj67_resamp_results)
+head(perm_dj_resamp_results)
+perm_dj_signif_05<-perm_dj_resamp_results[which(perm_dj_resamp_results$Adj_p_value<0.05),]
+nrow(perm_dj_signif_05)
+#94
+missing<-perm_dj_signif_05[!(perm_dj_signif_05$Orf %in% dj_signif_05$Orf),1]
+missing
+#"Mb0244"  "Mb0495"  "Mb2248c" "Mb2531c"
+#on edge of adj p-value 0.05, now lfc is significant after non-perm sites removed
+
+```
+
+Create new prot table from ENA gff that includes RD regions missing from NCBI gff used with dejesus tb.
+
+```{bash tb_prot_table}
+conda activate tnseq
+transit convert gff_to_prot_table ~/git/mtb_modules/ref_seqs/Mtb_h37rv.ASM19595v2_AL123456.3.gff3 Mtb_h37rv.AL123456.prot_table
+```
+
+warnings: skipping lines that do not contain 'locus tags' and file is empty. Maybe doesn't like ena format?
+
+Compare Ncbi and ena fasta sequences to make sure they are the same (otherwise need to generate new wig files)
+
+```{r compare_seqs, message=FALSE}
+#BiocManager::install("Biostrings")
+library(Biostrings)
+fasta.seqlengths("~/git/mtb_modules/ref_seqs/Mtb_H37Rv.fasta")
+fasta.seqlengths("~/git/mtb_modules/ref_seqs/AL123456.3.fasta")
+# sequence lengths match exactly
+ncbi<-readDNAStringSet("~/git/mtb_modules/ref_seqs/Mtb_H37Rv.fasta")
+ena<-readDNAStringSet("~/git/mtb_modules/ref_seqs/AL123456.3.fasta")
+ncbi==ena
+#TRUE
+```
+Make new prot table with ena gff3 file
+
+INstead of 'locus_tag' ENA has 'gene_id'
+
+```{r make_prot_tables}
+library(rtracklayer)
+library(GenomicRanges)
+library(stringr)
+
+# for TB
+
+# read in gff3 file
+ena_granges<-import("~/git/mtb_modules/ref_seqs/Mtb_h37rv.ASM19595v2_AL123456.3.gff3")
+ena_genes<-as.data.frame(ena_granges)
+my_types <- c('gene', 'ncRNA_gene', 'pseudogene')
+ena_df <- ena_genes[which(ena_genes$type %in% my_types),]
+# product:description, start:start, end:end, strand:strand, aa_len:-, type:type, gap:-, name:Name, ORF_ID: gene_id
+tb_prot_table<-data.frame(matrix(NA,ncol=9,nrow=nrow(ena_df)), stringsAsFactors = FALSE)
+colnames(tb_prot_table)<-c("PRODUCT","START", "END", "STRAND", "AA_LEN", "TYPE", "GAP", "NAME", "ORF_ID")
+tb_prot_table$PRODUCT <- ena_df$description
+tb_prot_table$START   <- ena_df$start
+tb_prot_table$END     <- ena_df$end
+tb_prot_table$STRAND  <- ena_df$strand
+tb_prot_table$AA_LEN  <- "-"
+tb_prot_table$TYPE    <- ena_df$type
+tb_prot_table$GAP     <- "-"
+tb_prot_table$NAME    <- ena_df$Name
+tb_prot_table$ORF_ID  <- ena_df$gene_id
+
+nrow(tb_prot_table)
+#4074
+# check for genes Sharon is looking for:Rv2645 to Rv2659c is a big run. Rv3118-Rv3121     Rv1256c-Rv1255c, Rv1506c to Rv1516c
+#check_genes<- c("Rv2645", "Rv2659c", "Rv3118", "Rv3121", "Rv1256c", "Rv1255c", "Rv1506c", "Rv1516c")
+#tb_prot_table[which(tb_prot_table$ORF_ID %in% check_genes),]
+# these are there
+write.table(tb_prot_table,"~/git/tn_seq/Mtb_AL123456_3.prot_table",sep="\t", col.names = F, row.names = F, quote = F)
+
+###############################################################################
+# for bovis
+
+bovis_granges<-import("~/git/mtb_modules/ref_seqs/LT708304_updated_aug19.gff")
+bovis_df<-as.data.frame(bovis_granges)
+my_types <- c('CDS', 'tRNA')
+#colnames(bovis_df)
+my_cols <- c(2:5,6,7, 24, 25, 28, 29)
+bovis_genes <- bovis_df[which(bovis_df$type %in% my_types),my_cols]
+#4045
+bovis_prot_table<-data.frame(matrix(NA,ncol=9,nrow=nrow(bovis_genes)), stringsAsFactors = FALSE)
+colnames(bovis_prot_table)<-c("PRODUCT","START", "END", "STRAND", "AA_LEN", "TYPE", "GAP", "NAME", "ORF_ID")
+# parse length from 'note' entry
+note <- bovis_genes$note 
+aa_len_pattern <- regexec("len: [0-9]* aa", note)
+aa_len<-regmatches(note, aa_len_pattern)
+aa_len[lengths(aa_len) == 0] <- NA_character_
+aa_len<-unlist(aa_len)
+
+bovis_prot_table$PRODUCT <- bovis_genes$product
+bovis_prot_table$START   <- bovis_genes$start
+bovis_prot_table$END     <- bovis_genes$end
+bovis_prot_table$STRAND  <- bovis_genes$strand
+bovis_prot_table$AA_LEN  <- aa_len
+bovis_prot_table$TYPE    <- bovis_genes$type
+bovis_prot_table$GAP     <- "-"
+bovis_prot_table$NAME    <- bovis_genes$gene
+bovis_prot_table$ORF_ID  <- substr(bovis_genes$locus_tag, 8,
+                                   nchar(bovis_genes$locus_tag))
+nrow(bovis_prot_table)
+#4045
+#View(bovis_prot_table)
+write.table(bovis_prot_table,"~/git/tn_seq/Mbovis_LT708304.prot_table",sep="\t", col.names = F, row.names = F, quote = F)
+
+```
+
+
+Run transit with new prot tables
+
+```{bash run_transit_new_tables}
+transit hmm add_22_23.wig ~/git/tn_seq/Mtb_AL123456_3.prot_table hmm_mtb_new_add_22_23.wig
+transit hmm add_19_21.wig ~/git/tn_seq/Mbovis_LT708304.prot_table hmm_bovis_new_add_19_21.wig
+```
+
+New prot table seemed to work fine.
+
+Look at comparison again
+
+```{r comparing_orthologs_new_tables}
+library(dplyr)
+# bovis transit results for samples 19 and 21 added together
+hmm_results<-read.delim("~/tn_seq/in_vitro_data/hmm_bovis_new_add_19_21_genes.wig", 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+# change to just gene and call--will affect downstream plots
+bovis_hmm <- select(hmm_results, 2, 1, 11)
+colnames(bovis_hmm) <- c("gene","ORF", "call")
+#match ORF format to orthologs ('Mb' vs 'MB')
+bovis_hmm$ORF<- sub('MB', 'Mb', bovis_hmm$ORF)
+nrow(bovis_hmm)
+#4045 (same as lines in prot_table)
+#tb transit results for samples 22 and 23 added together
+mtb_results<-read.delim("~/tn_seq/in_vitro_data/hmm_mtb_new_add_22_23_genes.wig", 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+# change to just gene and call--will affect downstream plots
+mtb_hmm <- select(mtb_results, 2, 1, 11)
+colnames(mtb_hmm) <- c("gene","ORF", "call")
+
+#unique(mtb_hmm$call)
+nrow(mtb_hmm)
+#4074 (same as lines in prot_table, more than I had before with ncbi prot table)
+
+# create dataframe with orthologs and calls from each
+# unique gene pairs tb/bovis
+malone_df<-read.delim("~/tn_seq/data/Malone_orthologs.csv", sep=",", header=FALSE, stringsAsFactors=F, skip=3)
+#View(malone_df)
+orthologs<-select(malone_df, 2,3,4,6,11)
+colnames(orthologs)<-c("TB_orf", "Bovis_orf", "gene", "func_cat", "i/v")
+#View(orthologs)
+orf_pairs<-paste(orthologs$TB_orf, orthologs$Bovis_orf, "/")
+length(orf_pairs) #3999
+orf_pairs<-unique(orf_pairs)
+length(orf_pairs) #3999
+# all pairs are unique
+#save orthologs
+saveRDS(orthologs, here("in_vitro_data/R_data/malone_orthologs.RData"))
+
+# make dataframe using orfs from orthologs and then look up calls. this will have some orfs listed twice, but in different pairs.
+
+# make table with orf names, calls in bovis and mtb
+comp_calls<-as.data.frame(matrix(0, nrow = nrow(orthologs), ncol = 7))
+colnames(comp_calls)<-c("bovis_orf", "bovis_call", "tb_orf", "tb_call", "gene", "v/i", "func_cat")
+
+comp_calls$bovis_orf  <- orthologs$Bovis_orf
+comp_calls$tb_orf     <- orthologs$TB_orf
+comp_calls$gene       <- orthologs$gene
+comp_calls$`v/i`      <- orthologs$`i/v`
+comp_calls$func_cat   <- orthologs$func_cat
+#View(comp_calls)
+
+for (i in 1:nrow(comp_calls)){
+  if (comp_calls$bovis_orf[i] %in% bovis_hmm$ORF){
+    comp_calls$bovis_call[i] <- bovis_hmm[which(bovis_hmm$ORF ==
+                                                  comp_calls$bovis_orf[i]),3]
+  }else{
+    # 0 if gene is not in bovis_hmm
+    comp_calls$bovis_call[i] <- 0
+    }
+  if (comp_calls$tb_orf[i] %in% mtb_hmm$ORF){
+    comp_calls$tb_call[i] <- mtb_hmm[which(mtb_hmm$ORF == comp_calls$tb_orf[i]),3]
+  }else{
+    # 0 if gene is not in tb_hmm
+    comp_calls$tb_call[i] <- 0
+    }
+}
+nrow(comp_calls)
+#3999
+
+# how many orthologs not found in tb genome
+missing_tb<- comp_calls[comp_calls$tb_call==0,]
+nrow(missing_tb)
+#0
+missing_bovis <- comp_calls[comp_calls$bovis_call==0,]
+nrow(missing_bovis)
+#1
+#2300   MB2495A          0 Rv2468A      NE    0 Identical
+# not sure why this is missing--it is in results? not sure why orf still is 'MB', changing manually
+comp_calls %>% filter(bovis_orf=="MB2495A")
+comp_calls$bovis_call[2300]<- "NE"
+comp_calls$bovis_orf[2300]<-"Mb2495A"
+#order by bovis orf
+sorted_comp_calls<-comp_calls[order(comp_calls$bovis_orf),]
+# change missing gene names to blank
+sorted_comp_calls$gene[sorted_comp_calls$gene == 0] <- c(" ")
+#View(sorted_comp_calls)
+#save file
+#write.table(sorted_comp_calls, "~/Data/07_05_21_orth_mb_tb.txt", quote=F, sep="\t", row.names = F, col.names = T)
+
+saveRDS(sorted_comp_calls, here("in_vitro_data/R_data/final_compare_calls.RData"))
+
+# how many 'N/A'? (these are genes where no call could be made by HMM)
+na<-comp_calls[comp_calls$bovis_call=="N/A",]
+nrow(na) #6
+na_tb<-comp_calls[comp_calls$tb_call=="N/A",]
+nrow(na_tb)
+#5
+```
+
+
+
+
+20 May, 2021
+
+Sharon has asked for each hiseq sample to be run through transit independently to compare the ES calls by sublibraries.
+
+```{bash message=F}
+transit hmm tpp/bovis_hiseq_tpp_19.wig ~/git/tn_seq/Mbovis_LT708304.prot_table hmm_20_05_21/hmm_bovis_19.wig
+transit hmm tpp/bovis_hiseq_tpp_20.wig ~/git/tn_seq/Mbovis_LT708304.prot_table hmm_20_05_21/hmm_bovis_20.wig
+transit hmm tpp/bovis_hiseq_tpp_21.wig ~/git/tn_seq/Mbovis_LT708304.prot_table hmm_20_05_21/hmm_bovis_21.wig
+```
+
+Make spreadsheet of gene calls from each sample
+
+```{r sublibrary_gene_calls}
+hmm_19 <- read.delim("~/Data/bovis_hiseq/hmm_20_05_21/hmm_bovis_19_genes.wig", 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+hmm_20 <- read.delim("~/Data/bovis_hiseq/hmm_20_05_21/hmm_bovis_20_genes.wig", 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+hmm_21 <- read.delim("~/Data/bovis_hiseq/hmm_20_05_21/hmm_bovis_21_genes.wig", 
+                        sep="\t", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+sublib_df <- data.frame(matrix(0, nrow=nrow(hmm_19), ncol=11)) 
+colnames(sublib_df) <- c("locus_id", "total_ta", "hmm_19", "hmm_20", "hmm_21", "sat_19", "sat_20", "sat_21", "rc_19", "rc_20", "rc_21")
+sublib_df$locus_id <- sub("B", "b", hmm_19$V1)
+sublib_df$total_ta <- hmm_19$V4
+sublib_df$hmm_19   <- hmm_19$V11
+sublib_df$hmm_20   <- hmm_20$V11
+sublib_df$hmm_21   <- hmm_21$V11
+sublib_df$sat_19   <- hmm_19$V9
+sublib_df$sat_20   <- hmm_20$V9
+sublib_df$sat_21   <- hmm_21$V9
+sublib_df$rc_19    <- hmm_19$V10
+sublib_df$rc_20    <- hmm_20$V10
+sublib_df$rc_21    <- hmm_21$V10
+head(sublib_df)
+```
+
+'saturation' == mean insertion rate within gene
+'mean_rc' == mean read count within gene
+
+Note: Libraries that are too sparse (e.g. < 30%) or which contain very low read-counts may be problematic for the HMM method, causing it to label too many Growth-Defect genes.
+
+Overall saturation of 3 sublibraries: 19:0.307, 20:0.132, 21:0.490
+The 21 sublibrary is most reliable.
+
+```{r}
+#look at just ES genes among the 3 compared to 21
+es_sublib <- sublib_df[which(hmm_21$V11=="ES"),]
+View(es_sublib)
+```
+
+The calls for the lower saturation sublibraries will be somewhat skewed as their read count distribution is not actually geometric (this is especially a problem withe 20). 
+
+![geometric distribution of read counts](images/geometric_distr_rc.png)
+
+
+The HMM model considers the position prior to determining state of current position--smoothes the read count data. So TA sites with no insertions in NE regions are tolerated, if in a region where there are insertions (assumption is that the library is missing insertions in this region because of low saturation). Using Viterbi algorithm, if length of no-insertions is long enough, will be enough to change state of position to ES.
+
+Use geometric distribution of read counts to calculate these liklihood probabilities for each state. In geometric distr., sites with signif higher than mean read counts will happen a lot less often than low numbers of read counts. The sublibrary 20 doesn't show this distribution--a large number of reads over very few insertion sites.
+
+The HMM adapts to lower insertion density by being more conservative about labelling TA sites as essential (like for sublibrary 19); but I imagine skewed distribution may still present a problem in the case of sublibrary 20.
+
+![example of diff calls for diff sublibs](~/tn_seq/images/ess_calls_sublibs.png)
+
+
+```{r}
+bov_ins<-read.csv("~/Data/perm_add_19_21.wig", comment.char = "#", sep="\t")
+sum(bov_ins[,1]!=0)
+#39987 insertions
+nrow(bov_ins)
+#73536
+sum(bov_ins[,1]!=0)/nrow(bov_ins)
+#0.5437745
+mtb_ins<-read.csv("~/Data/perm_add_22_23.wig", comment.char = "#", sep="\t")
+sum(mtb_ins[,1]!=0)
+#29919
+nrow(mtb_ins)
+#74604
+sum(mtb_ins[,1]!=0)/nrow(mtb_ins)
+# 0.4010375
+
+```

@@ -1,0 +1,5 @@
+"0","```bash
+cd /d/in16/u/sj003/anaconda3/envs/transit/lib/python3.7/site-packages/pytransit/analysis
+# should have used nohup
+nohup bash $my_path/scripts/iterate_resampling.sh final_samples.txt >& iterate_resampling.out &
+```"

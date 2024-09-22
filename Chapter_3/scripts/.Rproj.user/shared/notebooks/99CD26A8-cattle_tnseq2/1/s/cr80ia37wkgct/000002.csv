@@ -1,0 +1,112 @@
+"0","```r
+library(tidyverse)
+# create dataframe with orthologs and calls from each
+# unique gene pairs tb/bovis
+malone_tib<-read_csv(\"~/tn_seq/data/Malone_orthologs.csv\", skip=2, col_names = T)
+#View(malone_tib)
+# clean up the differences in names of functional categories (align with mycobrowser)
+malone_tib$`Fxnal anno`<- sub(\"virulence, detoxification,adaptation\", 	
+\"virulence, detoxification, adaptation\", malone_tib$`Fxnal anno`)
+malone_tib$`Fxnal anno` <- sub(\"intermediate metabolism and respiration\", \"intermediary metabolism and respiration\", malone_tib$`Fxnal anno`)
+malone_tib$`Fxnal anno` <- sub(\"Conserved hypothetical protein\", \"conserved hypotheticals\", malone_tib$`Fxnal anno`)
+malone_tib$`Fxnal anno` <- sub(\"PE23\", \"PE/PPE\", malone_tib$`Fxnal anno`)
+orthologs<-select(malone_tib, 2,3,6)
+colnames(orthologs)<-c(\"H37Rv_Ortholog\", \"Orf\", \"func_cat\")
+# change orf to match total_data
+orthologs$Orf<-sub(\"Mb\", \"MB\", orthologs$Orf)
+
+# how many unique ortholog pairs?
+length(unique(orthologs$Orf))
+#3963
+length(unique(orthologs$H37Rv_Ortholog))
+#3931
+# need to reduce to only one ortholog of bovis
+new_orthologs <- orthologs %>%
+  distinct(Orf, .keep_all=T)
+nrow(new_orthologs)
+
+## add in orthologs and functional categories to current df
+data_ortho <- data_8_10 %>% left_join(x=data_8_10, y=new_orthologs, by = \"Orf\")
+nrow(data_ortho %>% distinct(Orf))
+#4047
+
+#streamline functional categories to combine NA/0/'-'
+data_ortho <- data_ortho %>%
+  mutate(func_cat=replace(func_cat, func_cat==\"0\", NA)) %>%
+  mutate(func_cat=replace(func_cat, func_cat==\"-\", NA))
+nrow(data_ortho %>% distinct(Orf)) #4047
+
+# test
+data_ortho %>% 
+  select(filename, Orf, number, tissue, call) %>%
+  filter(Orf==\"MB2971c\") 
+# 26 entries
+
+
+data_ortho %>%
+  filter(number=NA)
+#df %>% drop_na(a)
+# this drops 500 genes-- all the genes that weren't run with resampling
+#data_ortho %>% drop_na(filename)
+#data_ortho %>% distinct(filename)
+data_ortho_test <- data_ortho[!is.na(data_ortho$Orf),]
+
+
+# how many different animals in total data
+data_ortho %>%
+  distinct(number, filename)
+#27
+
+data_ortho %>% filter(is.na(filename))
+
+data_ortho %>% filter(Orf == \"MB0001\")
+
+# number of distinct orfs
+nrow(data_8_10 %>% distinct(Orf))
+#4047 why is this diff than before orthologs? includes 
+nrow(data_ortho %>% distinct(Orf))
+#4047
+
+
+# # add missing info for MB2209 (fadD15) and MB2982cA (genes I added/edited because annotation was irregular--last time just removed because didn't start with 'MB')
+
+## FADD15	NA	HYPOTHETICAL PROTEIN	10	0	0	10	0	0.7000	168.14	NE
+## NA	Mb2982cA	possible glycosyl transferase	2	0	0	2	0	0.5000	1287.00	NE
+# could be orthologous to Rv2958c
+# 5' end of Rv2958c/Mb2982c
+
+data_ortho %>% filter(H37Rv_Ortholog == \"Rv2958c\") %>% distinct(Orf)
+data_ortho %>% 
+  filter(Orf == \"MB2982cA\") 
+data_ortho %>% distinct(Orf) %>% filter(!grepl(\"MB\", Orf))
+
+View(data_ortho %>% filter(Orf == \"MB2982cA\"))
+
+t1 <- data_ortho %>%
+  mutate(TAs = replace(TAs, Orf == \"MB2982cA\", 2)) %>%
+  mutate(call = replace(call, Orf ==\"MB2982cA\", \"NE\")) %>%
+  mutate(func_cat = replace(func_cat, Orf==\"MB2982cA\", \"intermediary metabolism and respiration\")) %>%
+  mutate(TAs = replace(TAs, Orf == \"MB2209\", 10)) %>%
+  mutate(call = replace(call, Orf==\"MB2209\", \"NE\")) %>%
+  mutate(func_cat = replace(func_cat, Orf== \"MB2209\", \"lipid metabolism\"))
+
+nrow(t1 %>% distinct(Orf))
+#4047
+
+data_ortho <- t1
+
+data_ortho %>% filter(is.na(Orf))
+nrow(data_ortho %>% filter(!grepl(\"MB\", Orf)) )
+
+# remove two genes that are mislabelled
+data_ortho <- data_ortho[!(is.na(data_ortho$Orf)),]
+data_ortho <- data_ortho[!data_ortho$Orf == \"FADD15\",]
+# remove non-CDS genes
+data_ortho <- data_ortho %>% filter(grepl(\"MB\", Orf))
+
+nrow(data_ortho %>% distinct(Orf))
+#4000 genes
+
+save(data_ortho, file=\"~/git/Mbovis_in-vivo_Tnseq/resamp_data.RData\")
+
+```"

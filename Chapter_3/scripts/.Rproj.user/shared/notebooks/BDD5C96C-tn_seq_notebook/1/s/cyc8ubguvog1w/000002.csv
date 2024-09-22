@@ -1,0 +1,22 @@
+"0","```bash
+#!/bin/bash
+
+# iterate transit normalisation on files in directory
+
+FILES=*.wig
+
+for file in $FILES
+
+do
+  # are both steps necessary? can't I just use one step: \"${file%.*}\"?
+	filename=$(basename \"$file\")    
+	filename=\"${filename%.*}\"
+
+	echo \"File on the loop:		${file}\"	
+
+	transit normalize ${file} ${filename}_TTR.wig -n TTR
+
+	echo \"normalised file: 		${filename}_TTR.wig\"
+
+done
+```"

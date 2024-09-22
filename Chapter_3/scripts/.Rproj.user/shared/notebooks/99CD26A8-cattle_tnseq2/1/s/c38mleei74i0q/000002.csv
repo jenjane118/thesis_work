@@ -1,0 +1,11 @@
+"0","```r
+#install.packages(\"here\")
+library(here)
+#here(\"data\", \"file_i_want.csv\")
+here()  #this is like getwd()
+#Build a path to something in a subdirectory and use it.
+#here(\"data\", \"bam_data\", \"test.txt\")
+#> [1] \"/Users/jenniferstiens/tn_seq/data/bam_data/test.txt\"
+#cat(readLines(here(\"data\", \"bam_data\", \"test.txt\")))
+#> Does this work?
+```"

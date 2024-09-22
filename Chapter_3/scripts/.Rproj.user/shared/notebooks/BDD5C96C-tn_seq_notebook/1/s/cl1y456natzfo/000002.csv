@@ -1,0 +1,3 @@
+"0","```bash
+bacteria_tradis -v -m 0 -f bovis_fastqs.txt -r /d/in16/u/sj003/refseqs/mbovis/Mbovis_AF2122_97.fasta
+```"

@@ -1,0 +1,4 @@
+"0","```bash
+transit convert gff_to_prot_table ~/git/mtb_modules/ref_seqs/MtbH37RvNC_000962.3.gff mtbH37Rv.prot_table
+
+```"

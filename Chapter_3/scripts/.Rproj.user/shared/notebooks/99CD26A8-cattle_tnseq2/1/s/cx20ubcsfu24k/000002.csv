@@ -1,0 +1,12 @@
+"0","```r
+df1 <- unnest(df1, cols = 2) %>%
+    mutate(Orf=replace(Orf, Orf==\"DD15\", \"MB2209\")) %>%
+    mutate(Name = replace(Name, Orf==\"MB2209\", \"fadD15\")) %>%
+    mutate(Orf=replace(Orf, Name==\"Mb2982cA\", \"MB2982cA\")) 
+
+#test
+unnest(df1, cols = 2) %>%
+  filter(!grepl(\"MB\", Orf)) %>%
+  distinct(Orf, Name)
+# 0 rows
+```"

@@ -1,0 +1,186 @@
+"0","```r
+library(tidyverse)
+library(RColorBrewer)
+#mycobactin genes, separate by tissues
+
+# read in data
+# load(\"resamp_data.RData\")
+
+# read in gene list
+myco_genes <- scan(here(\"lung_tnseq/data/gene_lists/mycobactin_mendum.txt\"), what=\"\", sep=\"\n\")
+pdim_genes <- scan(here(\"lung_tnseq/data/gene_lists/pdim_mendum.txt\"), what=\"\", sep=\"\n\")
+carb_genes <- scan(here(\"lung_tnseq/data/gene_lists/carb_trans_mendum.txt\"), what = \"\", sep=\"\n\")
+chol_kstr2_genes <- scan(here(\"lung_tnseq/data/gene_lists/chol_kstr2_mendum.txt\"), what = \"\", sep=\"\n\")
+mce_genes <- scan(here(\"lung_tnseq/data/gene_lists/mce4_operon.txt\"), what = \"\", sep=\"\n\")
+chol_ring_genes <- scan(here(\"lung_tnseq/data/gene_lists/chol_ring_cat_mendum.txt\"), what = \"\", sep=\"\n\")
+red_sulfate_genes <- scan(here(\"lung_tnseq/data/gene_lists/red_sulfate_mendum.txt\"), what = \"\", sep=\"\n\")
+
+
+red_sulfate <- data_ortho %>%
+  dplyr::filter(TAs > 5) %>%
+  dplyr::filter(call !=\"ES\") %>%
+  dplyr::filter(tissue == \"Lung\") %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  dplyr::filter(Orf %in% red_sulfate_genes) %>%
+  mutate(group = \"reductive sulfate\")
+
+red_sulfate %>%
+  dplyr::filter(Orf %in% red_sulfate_genes) %>%
+  mutate(group = \"reductive sulfate\") %>%
+  distinct(Orf)
+red_sulfate %>% distinct(Orf)
+
+# lung plot
+myco_all <- data_ortho %>%
+  filter(TAs > 5) %>%
+  filter(call !=\"ES\") %>%
+  filter(tissue == \"Lung\") %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  filter(Orf %in% myco_genes) %>%
+  mutate(group = \"mycobactin synth\")
+
+pdim_all <- data_ortho %>%
+  filter(TAs >5 ) %>%
+  filter(call !=\"ES\") %>%
+  filter(tissue == \"Lung\") %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  filter(Orf %in% pdim_genes) %>%
+  mutate(group = \"pdim synth\")
+
+carb <- data_ortho %>%
+  filter(TAs >5 ) %>%
+  filter(call !=\"ES\") %>%
+  filter(tissue == \"Lung\") %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  filter(Orf %in% carb_genes) %>%
+  mutate(group = \"carb transport\")
+  
+chol_kstr2 <- data_ortho %>%
+  filter(TAs >5 ) %>%
+  filter(call !=\"ES\") %>%
+  filter(tissue == \"Lung\") %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  filter(Orf %in% chol_kstr2_genes) %>%
+  mutate(group = \"kstr2 regulon\")
+
+mce <- data_ortho %>%
+  filter(TAs >5 ) %>%
+  filter(call !=\"ES\") %>%
+  filter(tissue == \"Lung\") %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  filter(Orf %in% mce_genes) %>%
+  mutate(group = \"chol import/mce4\")
+
+chol_ring <- data_ortho %>%
+  filter(TAs >5 ) %>%
+  filter(call !=\"ES\") %>%
+  filter(tissue == \"Lung\") %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  filter(Orf %in% chol_ring_genes) %>%
+  mutate(group = \"chol ring catab\")
+
+base_lung <- data_ortho %>%
+  mutate(group = \"background\") %>%
+  filter(TAs >5 ) %>%
+  filter(call !=\"ES\") %>%
+  filter(tissue == \"Lung\") %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  ungroup() %>%
+  mutate(mean_lfc = NA) #set as NA so segments won't show
+  
+
+median(base_lung$norm_lfc)
+#0
+median(base_lung$log2FC)
+#-0.91
+# tried bind rows instead of join, but getting errors with segments (not showing)
+# try again full joining one at a time--yes, this solved error
+#dfs <- c(myco_all, pdim_all, red_sulfate, carb, chol_kstr2, mce, chol_ring)
+data <- NULL
+data <- full_join(myco_all, pdim_all)
+data <- full_join(data, carb)
+data <- full_join(data, chol_kstr2)
+data <- full_join(data, mce)
+data <- full_join(data, chol_ring)
+data <- full_join(data, base_lung)
+#data <- full_join(data, red_sulfate)
+data$group <- as.factor(data$group)
+
+x_labels <- c(\"All genes\", \"Carb transport\", \"Chol import\", \"Chol ring catab\", \"kstR2 regulon\", \"Mycobactin synth\", \"PDIM synth\")
+
+lung <-ggplot(data=data, group=group) +
+        geom_violin( aes(x = group, y = norm_lfc, fill = group),
+                     trim=F, draw_quantiles = 0.5) +
+        geom_segment( aes(
+              x    = match(group, levels(group)) - 0.1,
+			        xend = match(group, levels(group)) + 0.1,
+		          y    = mean_lfc,
+			        yend = mean_lfc ),
+		          col='white') +
+        scale_fill_manual(values=c(\"grey50\", \"red3\",
+                          \"#00FF00\",\"dodgerblue3\", \"yellow2\",
+                          \"violetred2\",\"turquoise3\",
+                          \"chocolate4\")) +
+        #scale_fill_brewer(type = \"qual\", palette = \"Spectral\") +
+        ggtitle(label = \"Selected gene groups: Lung samples\") +
+                #, subtitle = \"white = mean LFC for Orf; black = median LFC for group, normalised for median of background logFC\") +
+        theme(panel.background = element_rect(
+                  fill = \"grey75\", 
+                  colour = \"grey75\"),
+              panel.grid.major.x = element_blank(), 
+              panel.grid.minor = element_blank(),
+              axis.text.x = element_text(
+                        angle = 55, 
+                        vjust = 1, 
+                        hjust=1,
+                        size=14, 
+                        face = \"bold.italic\"),
+              plot.title = element_text(hjust = 0.5),
+              axis.title.y = element_text(size=12, face=\"bold\"),
+              axis.text.y = element_text(size=10, face = \"bold\"),
+              axis.title.x = element_blank(),
+              legend.position=\"none\" ) +
+      scale_x_discrete(labels= x_labels) +
+      ylab(\"normalized log2 FC\")
+lung
+ggsave(here(\"images/gene_group_violins_lung2.png\"), width = 9)
+
+```"

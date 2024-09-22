@@ -1,0 +1,8 @@
+"0","```bash
+thoth.cryst.bbk.ac.uk> bacteria_tradis -f file.list -t GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA -r /d/in16/u/sj003/refseqs/mbovis/Mbovis_AF2122_97.fasta -td 5 -mm 1
+There was a problem filtering '/d/in16/u/sj003/mbovis/biotradis/G_S3_L001_R1_001.fastq' by 'GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA'; it looks like the tag was not found in any read
+None of the input files contained the specified tag.  Please check that your inputs are valid fastq files and that at least one read in one of them starts with the specified tag
+thoth.cryst.bbk.ac.uk> head -50 G_S3_L001_R1_001.fastq
+@M01637:39:000000000-CDG9B:1:1101:14529:1617 1:N:0:AGTGGT
+GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTACTAGATCGGAAGAGCACACGTCTGAACTCCAGTCACAGTGGTCAATCTCGTATGCCGTCTTCTGCTTGTAATAAATTATTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+```"

@@ -1,0 +1,5 @@
+"0","```bash
+sed -n ‘9321,9324p’ file
+sed -n ‘9321,+3p’ file
+## without -n will print all other lines except for indicated lines
+```"

@@ -1,0 +1,8 @@
+"0","```r
+```bash
+# edit iterate resampling to use betageom, and make betageom_samples.txt
+source ~/.bashrc
+conda activate transit
+nohup bash $my_path/scripts/iterate_resampling.sh betageom_samples.txt >& iterate_resampling.out &
+```
+```"

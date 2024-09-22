@@ -1,0 +1,4 @@
+"0","```bash
+File,Total Reads,Reads Matched,% Matched,Reads Mapped,% Mapped,Unique Insertion Sites : NC_000962.3,Seq Len/UIS : NC_000962.3,Total Unique Insertion Sites,Total Seq Len/Total UIS
+SRR4113440_1.fastq,3832963,5,0.000130447384960408,3,60,3,1470510.66666667,3,1470510.66666667
+```"

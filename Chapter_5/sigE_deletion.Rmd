@@ -1,0 +1,844 @@
+---
+title: "sigE deletion notebook"
+output: html_notebook
+author: "Jennifer J. Stiens"
+date: "7 March, 2023"
+---
+
+
+```{r "knitr config", cache = FALSE, include=FALSE}
+require("here")
+i_am("sigE_deletion.Rproj")
+
+require("knitr")
+opts_chunk$set(echo = TRUE)
+# Set the root directory to the project directory so all paths
+# that follow will be relative to that directory
+opts_knit$set(root.dir = "../")
+```
+
+Used snakemake pipeline to download sra files from project PRJNA869087.
+
+[sra project PRJNA869087](https://www.ncbi.nlm.nih.gov/bioproject/PRJNA869087)
+
+Abstract:
+Bacteria respond to nutrient starvation implementing the stringent response, a stress signalling system resulting in metabolic remodelling leading to decreased growth rate and energy requirements. A well-characterized model of stringent response in Mycobacterium tuberculosis is that one induced by growth in low phosphate. The extracytoplasmic function (ECF) sigma factor SigE was previously suggested having a key role in the activation of stringent response. In this study we challenge this hypothesis by analyzing the temporal dynamics of the transcriptional response of a sigE mutant and its wild-type parental strain to low phosphate using RNA sequencing. We found that both strains responded to low phosphate with a typical stringent response trait, including the downregulation of genes encoding ribosomal proteins and RNA polymerase. We also observed transcriptional changes that support the occurring of an energetics imbalance, compensated by a reduced activity of the electron transport chain, decreased export of protons and a remodelling of central metabolism. The most striking difference between the two strains was the induction in the sigE mutant of several stress-related genes. In particular, the genes encoding the ECF sigma factor SigH and the transcriptional regulator WhiB6. Since both proteins respond to redox unbalances, their induction suggests that the sigE mutant is not able to maintain redox homeostasis in response to the energetics imbalance induced by low phosphate. In conclusion, our data suggest that SigE is not directly involved in initiating stringent response, but in protecting the cell from stress consequent to the exposure to low phosphate and activation of stringent response. Overall design: Comparative gene expression profiling analysis over time of M. tuberculosis of RNA-seq data for wild-type H37Rv strain (WT) and its isogenic sigE null mutant ST28 (MU) in which SigE is rendered non-functional. Triplicate WT and MU cultures grown in phosphate-rich substrate were washed and re-suspended in low-phosphate substrate at 0 hours. RNA extraction was performed at 0 hours (high phosphate) and 6, 12, and 24 hours (low phosphate).
+
+See rna_seq_nb.ipynb for details. Metadata and QC info in data
+
+Downloaded WT and sigE null mutant rna-seq in normal conditions ('high phosphate'). FastP number of reads passing quality control:
+
+SRR21026199_fastp 69952114.0
+SRR21026195_fastp 81551958.0
+SRR21026197_fastp 71654586.0
+SRR21026196_fastp 89879690.0
+SRR21026198_fastp 61663800.0
+SRR21026200_fastp 60050326.0
+
+
+Mapped to H37Rv. Transferred bam files from thoth to /Volumes/Data_disk/mtb_bams/sigE_deletion
+
+Parse mapping stats
+
+```{bash eval=F}
+#parse flagstat files
+
+cd data/stats
+for file in `ls`;do
+    sed -n '8p' $file >>stats.txt
+    done
+```
+
+80549794 + 0 primary mapped (98.77% : N/A)
+89178887 + 0 primary mapped (99.22% : N/A)
+71059223 + 0 primary mapped (99.17% : N/A)
+60986809 + 0 primary mapped (98.90% : N/A)
+69488865 + 0 primary mapped (99.34% : N/A)
+59292625 + 0 primary mapped (98.74% : N/A)
+
+All above 98% mapped
+
+Looked at bam files on artemis
+
+![WT vs delta_sigE](images/sig_E_null.png)
+Not a whole lot of difference visible (plotting sample '#####199' and '#####200', WT and mutant) But maybe worth doing deseq to see? Need to use annotation that has ncRNA in it. Use one from wgcna project?
+
+SRR2102616177-82 are 'low phosphate' WT vs delta-sigE. 24 hours Possibly will have phoPR induced?
+
+SRR21026195-200 are 'high phosphate' WT vs delta-sigE. 0 hours.
+
+```{r quantify_reads_low_phosphate, eval=F}
+#need to remove old package from conda env library 
+#remove.packages("baerhunter")
+#Removing package from ‘/Users/jenniferstiens/anaconda3/envs/r_4.0/lib/R/library’
+#(as ‘lib’ is unspecified)
+#install newest version
+#devtools::install_github("irilenia/baerhunter", dependencies=FALSE, force=T)
+
+library(tidyverse)
+library(baerhunter)
+library(tools)
+
+# get a list of the bam files
+bam_directory <- "/Volumes/Data_disk/mtb_bams/sigE_deletion/low_phosphate"
+bam_files <- list.files(path = bam_directory, pattern = ".BAM$", full.names = TRUE, ignore.case = TRUE)
+sample_names <- c(file_path_sans_ext(basename(bam_files)))
+annot_file <- "comb_filtered_ov_30_11.gff3"
+chrom_file=here("seqs/Chromosome.txt")
+
+count_features(bam_dir = bam_directory, 
+                     annotation_dir = here("seqs/"), 
+                     annotation_file = annot_file,
+                     output_dir = here("output/"),
+                     output_filename = "PRJNA869087",
+                     chromosome_alias_file = here("seqs/Chromosome.txt"),
+                     strandedness = "reversely_stranded",
+                     is_paired_end = T,
+                     excl_rna =T)
+
+
+cf_data <- as.matrix(read.delim(here("output/PRJNA869087_Counts.csv")), sep="\t")
+head(cf_data)
+#save counts data
+saveRDS(cf_data, here("R_data/counts_lowphos.RData"))
+
+col_data <- as.data.frame(read.csv(here("data/PRJNA869087_24Hrs_lo_phosphate.txt"), sep=","), header=TRUE)
+# rearrange col_data to match count data
+col_order <- colnames(cf_data)
+col_data2 <- col_data[match(col_order, col_data$Run),]
+#create rownames
+rownames(col_data) <- col_data$Run
+# do necessary check for deseq2
+all(rownames(col_data) %in% colnames(cf_data))
+all(rownames(col_data) == colnames(cf_data))
+#save col data
+col_data <- col_data %>% select(Run, Condition, Experiment, Genotype, Strain)
+col_data$Strain <- as.factor(col_data$Strain)
+saveRDS(col_data, here("R_data/low_phos_coldata.RData"))
+```
+
+Could do tpm flagging/filtering, but all transcripts > 10 reads
+
+Can't tell batches/replicates from metadata.
+
+```{r run_deseq_low_phosphate}
+
+library(DESeq2)
+library(RColorBrewer)
+library(pheatmap)
+library(PCAtools)
+library(sva)
+
+col_data <- readRDS(here("R_data/low_phos_coldata.RData"))
+cf_data <- readRDS(here("R_data/counts_lowphos.RData"))
+
+#round values in cf_data
+dds <- DESeqDataSetFromMatrix(countData = round(cf_data),
+                              colData = col_data,
+                              design = ~ 1)
+
+#pre-filtering
+keep <- rowSums(counts(dds)) >= 10
+length(keep)
+#all > 10
+dds <- dds[keep,]
+
+# check the (alphabetical) order of levels makes sense
+dds$Strain
+
+design(dds) <- formula(~ 1 + Strain)
+dds <- DESeq(dds) 
+resultsNames(dds)
+
+vsd <- vst(dds, blind=TRUE)
+rld <- rlog(dds, blind=TRUE)
+plotPCA(vsd, intgroup=c("Strain"))
+plotPCA(rld, intgroup=c("Strain"))
+
+#any batch effects?
+#we know of two variables but are interested in any surrogate variables
+dat  <- counts(dds, normalized = TRUE)
+idx  <- rowMeans(dat) > 1
+dat  <- dat[idx, ]
+mod  <- model.matrix(~ Strain, colData(dds))
+mod0 <- model.matrix(~ 1, colData(dds))
+#estimate number of surrogate variables
+svseq <- svaseq(dat, mod, mod0, n.sv=NULL)
+#suggests single surrogate variable but I don't know replicates, etc
+#for only one
+par(mfrow = c(1, 1), mar = c(5.1, 4.1, 4.1, 2.1))
+#png(here("images/sv1_experiment_strip.png"))
+stripchart(svseq$sv[, 1] ~ dds$Strain, vertical = TRUE, main = paste0("SV", 1))
+abline(h = 0)
+#dev.off()
+
+
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$Strain, sep="-")
+colnames(sampleDistMatrix) <- NULL
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
+
+#use PCAtools to visualise largest loadings
+p<- pca(assay(vsd), metadata=col_data)
+screeplot(p)
+biplot(p, colby="Strain")
+pairsplot(p, colby= "Strain")
+# these are showing division by strain, but also 2 samples (one of each strain 96/97) separated somehow from other 4
+plotloadings(p)
+#key differences in quite a few genes
+#putative_sRNA:p3467971_3468335 looks weird?
+cf_data["putative_sRNA:p3467971_3468335",]
+# really low <2000 in samples 96, 97 > 5000 in 95, 98,99,00
+#factor of 10X diff between some sample pairs with WT being larger (95/96 and 99/00) but switched other way round for 97/98?
+
+plotCounts(dds, gene="gene:Rv0758", intgroup="Strain")
+plotCounts(dds, gene = "putative_sRNA:m852286_852683", intgroup="Strain")
+plotCounts(dds, gene = "gene:Rv0757", intgroup= "Strain")
+plotCounts(dds, gene = "gene:Rv0991c", intgroup = "Strain")
+
+#Rv0757 and Rv0758 and antisense
+cf_data["gene:Rv0757",]
+cf_data["gene:Rv0758",]
+cf_data["putative_sRNA:m852286_852683",]
+#counts don't look super different
+
+#DESeq_data_all <- DESeq(dds)
+res <- results(dds, name = "Strain_ST28_vs_H37Rv")
+res_05 <- results(dds, name = "Strain_ST28_vs_H37Rv", alpha = 0.05)
+sum(res$padj < 0.05, na.rm=T)
+#1709 genes different
+
+plotCounts(dds, gene=which.min(res$padj), intgroup="Strain")
+#Rv2466
+
+## Write the analysis results into a file.
+res_df <- as.data.frame(res)
+res_df <- as_tibble(res_df, rownames = "gene_locus")
+write.table(res_df, here("output/low_WTvDeltaSigE_results.csv"))
+
+#number protein coding genes
+res_df %>% filter(padj < 0.05 & grepl("gene:Rv", gene_locus))
+#1033
+#how many lfc > 2
+res_df %>% filter(padj < 0.05 & abs(log2FoldChange) > 2)
+#71
+## Write the analysis summary statistics into another file.
+#sum_outfile <- "output/deseq_results_summary"
+#capture.output(summary(DESeq_res), file = sum_outfile)
+
+png("images/MAplot.png")
+plotMA(res, ylim=c(-4,4), main="WT vs deltaSigE")
+dev.off()
+
+#volcano plot
+pl_df <- res_df %>% mutate(signif = padj<0.054)
+
+#volcano plot of results
+ggplot(pl_df) +
+  geom_point(aes(x=log2FoldChange, y=-log10(padj), color=signif)) +
+  scale_colour_manual(name = "signif",values = c("black", "blue")) +
+  xlab("log2 fold change") + 
+  ylab("-log10 adjusted p-value") +
+  theme(legend.position = "none") +
+  geom_vline(xintercept = 2, color="red")+
+  geom_vline(xintercept = -2, color="red")
+```
+
+Doesn't include phoPR or antisense in changed genes.
+
+
+Quantify reads for high phosphate bams
+
+
+```{r quantify_reads_high, eval=F}
+library(devtools)
+# had to install genomeInfoDbData directly in R because wasn't getting new enough version using conda?
+#library(BiocManager)
+#BiocManager::install("GenomeInfoDbData")
+#library(GenomeInfoDb)
+#library(IRanges)
+#library(GenomicAlignments)
+#install newest version of baerhunter, dependencies false so can install with conda
+#devtools::install_github("irilenia/baerhunter", dependencies=FALSE, force=T)
+
+library(tidyverse)
+library(baerhunter)
+library(tools)
+
+# get a list of the bam files
+bam_directory <- "/Volumes/Data_disk/mtb_bams/sigE_deletion/high_phosphate"
+bam_files <- list.files(path = bam_directory, pattern = ".BAM$", full.names = TRUE, ignore.case = TRUE)
+sample_names <- c(file_path_sans_ext(basename(bam_files)))
+annot_file <- "comb_filtered_ov_30_11.gff3"
+chrom_file=here("seqs/Chromosome.txt")
+
+count_features(bam_dir = bam_directory, 
+                     annotation_dir = here("seqs/"), 
+                     annotation_file = annot_file,
+                     output_dir = here("output/"),
+                     output_filename = "PRJNA869087_B",
+                     chromosome_alias_file = here("seqs/Chromosome.txt"),
+                     strandedness = "reversely_stranded",
+                     is_paired_end = T,
+                     excl_rna =T)
+
+counts <- as.matrix(read.delim(here("output/PRJNA869087_B_Counts.csv")), sep="\t")
+head(counts)
+#save counts data
+saveRDS(counts, here("R_data/counts_hiphos.RData"))
+
+col_data <- as.data.frame(read.csv(here("data/PRJNA869087_metadata.txt"), sep=","), header=TRUE)
+# rearrange col_data to match count data
+col_order <- colnames(counts)
+col_data <- col_data[match(col_order, col_data$Run),]
+#create rownames
+rownames(col_data) <- col_data$Run
+# do necessary check for deseq2
+all(rownames(col_data) %in% colnames(counts))
+all(rownames(col_data) == colnames(counts))
+#save col data
+col_data <- col_data %>% select(Run, Condition, Experiment, Genotype, Strain)
+col_data$Strain <- as.factor(col_data$Strain)
+saveRDS(col_data, here("R_data/high_phos_coldata.RData"))
+
+```
+
+Need to add the counts for these to the original counts dataframe
+
+```{r make_counts_dataframe, eval=F}
+library(dplyr)
+#high phosphate
+counts_hi <- readRDS(here("R_data/counts_hiphos.RData"))
+col_hi <- readRDS(here("R_data/high_phos_coldata.RData"))
+
+#low phosphate
+counts_low <- readRDS(here("R_data/counts_lowphos.RData"))
+col_low <- readRDS(here("R_data/low_phos_coldata.RData"))
+
+#merge two dataframes
+counts_df <- cbind(counts_hi,counts_low)
+dim(counts_df)
+#merge col_data
+col_df <- rbind(col_hi, col_low)
+dim(col_df)
+# do necessary check for deseq2
+all(rownames(col_df) == colnames(counts_df))
+
+#save dataframe
+saveRDS(counts_df, here("R_data/counts_df.RData"))
+saveRDS(col_df, here("R_data/metadata_df.RData"))
+
+```
+
+
+Next steps:
+
+Make some PCA plots 
+Run DESeq2 for two variables: WT vs sigE deletion and hi vs low phosphate
+Normalise data
+
+```{r deseq_object}
+library(DESeq2)
+library(tidyverse)
+
+counts_df <- readRDS(here("R_data/counts_df.RData"))
+#need to round fractional counts
+counts_matrix <- as.matrix(round(counts_df))
+
+col_df <- readRDS(here("R_data/metadata_df.RData"))
+
+#change Condition to exclude whitespace and make a factor
+col_df$Condition <- as.factor(c(rep("high", 6), rep("low", 6)))
+#conditions_data <- conditions_data %>% dplyr::mutate(Condition = str_replace_all(Condition, c("low phosphate" = "low_phosphate", "high phosphate"="high_phosphate") ))
+
+dds<-DESeqDataSetFromMatrix(countData = counts_matrix,
+                              colData = col_df,
+                              design = ~1)
+design(dds) <- formula(~ 1 + Strain + Condition + Condition:Strain)
+dds <- DESeq(dds) 
+resultsNames(dds)
+
+#with 1 interaction term
+#[1] "Intercept"               "Strain_ST28_vs_H37Rv"    "Condition_low_vs_high"  
+#[4] "StrainST28.Conditionlow"
+
+#B0 = intercept
+#B1 = strain: ST28 vs H37Rv
+#B2 = condition: low vs hi
+#B3 = condition:low.wt:ST28 (interaction term)
+
+genes <- c("gene:Rv0757", "gene:Rv0758", "putative_sRNA:m852286_852683")
+
+#use model madds_asphor#use model matrix solution:
+mod_mat <- model.matrix(design(dds), colData(dds))
+low_wt <- colMeans(mod_mat[dds$Condition == "low" & dds$Strain == "H37Rv", ]) 
+low_ST28 <- colMeans(mod_mat[dds$Condition == "low" & dds$Strain == "ST28", ]) 
+hi_wt <- colMeans(mod_mat[dds$Condition == "high" & dds$Strain == "H37Rv", ])
+hi_ST28 <- colMeans(mod_mat[dds$Condition == "high" & dds$Strain == "ST28", ])
+
+#B1 Strain_ST28_vs_H37Rv
+#Null: B1=0 (no difference between the strains in high condition)
+res1 <- results(dds, contrast = hi_ST28 - hi_wt, alpha=0.05)
+summary(res1)
+sum(res1$padj < 0.05, na.rm=T)
+#2440
+res1_df <- as_tibble(as.data.frame(res1), rownames="gene_locus")
+res1_df %>% filter(gene_locus %in% genes)
+
+
+#B2 Condition hi vs low
+#B2 = 0 (no change with treatment with H37Rv)
+res2 <- results(dds, contrast = hi_wt - low_wt)
+res2_05 <- results(dds, contrast = hi_wt - low_wt, alpha = 0.05)
+summary(res2_05)
+sum(res2_05$padj < 0.05, na.rm=T)
+#3655
+res2_05_df <- as_tibble(as.data.frame(res2_05), rownames="gene_locus")
+res2_05_df %>% filter(gene_locus %in% genes)
+#antisense shows no difference in expression with hi vs low in wt
+
+# testing main effect of treatment on sigE mutant
+#B1 + B3 = 0 (treatment has no effect on mutant samples)
+res3 <- results(dds, contrast = hi_ST28 - low_ST28)
+res3_05 <- results(dds, contrast = hi_ST28 - low_ST28, alpha =0.05)
+summary(res3_05)
+sum(res3_05$padj < 0.05, na.rm=T)
+res3_df <- as_tibble(as.data.frame(res3_05), rownames="gene_locus")
+#2774
+#shows small lfc in antisense (0.644, 0.0126) with hi vs low in mutant strain 
+# expression of antisense more sensitive to phosphate level without sigE
+
+##main condition effect on two different genotypes (difference between low wt and low mutant)
+#null: B2 + B3 = 0
+res3 <- results(dds, contrast = low_ST28 - low_wt)
+res3_05 <- results(dds, contrast = low_ST28 - low_wt, alpha=0.05)
+sum(res3_05$padj < 0.05, na.rm=TRUE)
+summary(res3_05)
+res3_df <- as_tibble(as.data.frame(res3_05), rownames="gene_locus")
+#2228
+res3_df %>% filter(gene_locus %in% genes)
+#none signif changed (no diff with wt vs no sigE in low phos)
+
+#is the effect of treatment DIFFERENT depending on genotype (interaction effect)
+#NULL: B3 = 0
+res4 <- results(dds, contrast = (low_ST28 - low_wt) - (hi_ST28 - hi_wt))
+res4_05 <- results(dds, contrast = (low_ST28 - low_wt) - (hi_ST28 - hi_wt), alpha = 0.05)
+sum(res4_05$padj < 0.05, na.rm = T)
+#1910
+summary(res4_05)
+#945 up, 965 down
+res4_df <- as.data.frame(res4)
+res4_df <- as_tibble(res4_df, rownames = "gene_locus")
+write_csv(res4_df, here("output/interaction_deseq_res.csv"))
+res_interax_df <- as_tibble(res4_df) %>% filter(padj < 0.05) %>% arrange(log2FoldChange)
+write_csv(res_interax_df, here("output/interaction_hits.csv"))
+
+res4_df %>% filter(gene_locus %in% genes)
+#no difference in antisense expression in low/hi phos dep on mutant
+
+saveRDS(res4_df, here("R_data/interaction_dds_results.RData"))
+
+```
+
+
+These results show no difference in any comparison for phoPR or antisense in hi vs low or in mutant. 
+
+
+Transformation of counts
+
+"blind dispersion estimation is not the appropriate choice if one expects that many or the majority of
+genes (rows) will have large differences in counts which are explainable by the experimental design, and one
+wishes to tranform the data for downstream analysis. In this case, using blind dispersion estimation will lead
+to large estimates of dispersion, as it attributes differences due to experimental design as unwanted “noise”,
+and will result in overly shrinking the transformed values towards each other"
+
+
+```{r transformation}
+
+
+vsd <- vst(dds, blind=F)
+rld <- rlog(dds, blind=F)
+plotPCA(vsd, intgroup=c("Condition", "source_name"))
+
+plotPCA(rld, intgroup=c("Condition", "source_name"))
+
+```
+
+Heatmap
+
+```{r heatmap and pca transformed}
+library(pheatmap)
+library(viridisLite)
+library(RColorBrewer)
+library(PCAtools)
+
+#heatmap using vsd transformed
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$Condition, sep="-")
+colnames(sampleDistMatrix) <- paste(vsd$source_name, sep="-")
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
+
+#use PCAtools to visualise largest loadings
+
+p<- pca(assay(vsd), metadata=conditions_data)
+screeplot(p)
+biplot(p, colby="Condition", 
+       shape="source_name",
+       legendPosition = "right")
+       #colkey = c(high_phosphate='red', low_phosphate='blue'),
+       #shapekey = c(H37Rv="circle", ST28="triangle"))
+pairsplot(p, colby= "Condition", shape="source_name")
+
+plotloadings(p)
+#key differences in Rv0287 and Rv0292
+counts_df["gene:Rv0292",]
+counts_df["gene:Rv0287",]
+#massive difference in counts...but not reflected in the overall sum of counts in sample
+sum(count_df[,"X3.A063.6_S12"])
+sum(count_df[,"X1.A063.1_S4"])
+
+
+```
+
+Appears that sigE mutant is less sensitive to low phosphate condition than WT, but may possibly upregulate expression as opposed to downregulation in WT? See pairs plot PCA2 v PCA3 and PCA1 v PCA3
+
+
+```{r normalisation_boxplot}
+library(DESeq2)
+library(viridisLite)
+
+#boxplot for original data 
+dds.untransformed <- assay(dds)
+colnames(dds.untransformed)<-colnames(dds)
+
+#par(cex.axis=0.5) 
+#par(mar=c(4,2,1,1))
+cond_colors = c(rep("#440154FF",6),rep("#FDE725FF",6))
+norm_boxplot <- boxplot(dds.untransformed, 
+                        PchCex =0.01,
+                        axes=TRUE,
+                        las=2,
+                        col=cond_colors, 
+                        ylim = c(0,10000),
+                        outline =TRUE,
+                        outcex=0.35,
+                        main="non_normalized data")
+legend("topleft", legend=c("high_phosphate", "low_phosphate"), 
+               col = c("#440154FF","#FDE725FF"), 
+               fill = c("#440154FF","#FDE725FF"),
+               cex = 0.50, 
+               pt.cex = 1)
+
+#boxplot for transformed (normalised) data 
+#par(cex.axis=0.5) 
+#par(mar=c(4,2,1,1))
+dds.vsd <- assay(vsd)
+norm_boxplot <- boxplot(dds.vsd, 
+                        PchCex =0.01,
+                        axes=TRUE,
+                        las=2,
+                        col=cond_colors, 
+                        #ylim = c(0,100),
+                        outline =TRUE,
+                        outcex=0.35,
+                        main="rlog transformed")
+legend("topleft", legend=c("high_phosphate", "low_phosphate"), 
+               col = c("#440154FF","#FDE725FF"), 
+               fill = c("#440154FF","#FDE725FF"),
+               cex = 0.50, 
+               pt.cex = 1)
+```
+
+DESeq analysis:
+
+from: 
+[deseq docs](https://bioconductor.riken.jp/packages/3.2/bioc/vignettes/DESeq2/inst/doc/DESeq2.pdf)
+
+Start with original design (like example 2 in help: two conditions, two genotypes with interaction term)
+
+A contrast is a linear combination of estimated log2 fold changes, which can be used to test if differences
+between groups are equal to zero.
+
+Interaction terms can be added to the design formula, in order to test, for example, if the log2 fold change
+attributable to a given condition is different based on another factor, for example if the condition effect differs
+across genotype.
+
+This answers question: is condition effect different across genotypes
+results(dds, name="ST28.low_phosphate")
+
+https://support.bioconductor.org/p/66417/
+
+
+The LRT examines two
+models for the counts, a full model with a certain number of terms and a reduced model, in which some of
+the terms of the full model are removed. The test determines if the increased likelihood of the data using the
+extra terms in the full model is more than expected if those extra terms are truly zero.
+The LRT is therefore useful for testing multiple terms at once, for example testing 3 or more levels of a factor
+at once, or all interactions between two variables. The LRT for count data is conceptually similar to an analysis
+of variance (ANOVA) calculation in linear regression, except that in the case of the Negative Binomial GLM,
+we use an analysis of deviance (ANODEV), where the deviance captures the difference in likelihood between
+a full and a reduced model
+
+
+Test main effect (phosphate) on genotype (wt vs sigE)
+
+```{r deseq_analysis_interaction}
+library(DESeq2)
+library(tidyverse)
+
+hi_counts
+lo_counts
+counts <- cbind(hi_counts,lo_counts)
+saveRDS(counts, here("R_data/counts_df.RData"))
+#need to round fractional counts
+counts_matrix <- as.matrix(round(counts))
+
+col_df <- readRDS(here("R_data/metadata_df.RData"))
+conditions_data <- col_df %>% select(Condition, source_name)
+#change Condition to exclude whitespace
+conditions_data <- conditions_data %>% dplyr::mutate(Condition = str_replace_all(Condition, c("low phosphate" = "low_phosphate", "high phosphate"="high_phosphate") ))
+
+dds<-DESeqDataSetFromMatrix(countData = counts_matrix,
+                              colData = conditions_data,
+                              design = ~source_name + 
+                                Condition + source_name:Condition)
+
+#pre-filtering
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep,]
+
+dds <- DESeq(dds) 
+resultsNames(dds)
+
+
+#condition effect for H37Rv (main effect)
+genes <- c("gene:Rv0757", "gene:Rv0758", "putative_sRNA:m852286_852683")
+main_effect <- results(dds, contrast=c("Condition", "low_phosphate", "high_phosphate"))
+plotCounts(dds, gene=genes[3], intgroup=c("Condition", "source_name"), transform = T, pc=1)
+plotCounts(dds, gene=genes[1], intgroup=c("Condition","source_name"), transform = T, pc=1)
+
+
+# ggplot of main effect on antisense
+d_main <- plotCounts(dds, gene=genes[3], intgroup=c("Condition", "source_name"), transform = T, pc=1, returnData=TRUE)
+d_tib_main <- as_tibble(d_main, rownames="sample")
+gp <- ggplot(d_tib_main, aes(x=Condition, y=count, color=source_name)) +
+  geom_point() +
+  ggtitle("main effect of phosphate condition on antisense expression")
+gp
+#ggsave(here("images/as_expr_cond.png"), gp)  
+
+# likelihood ratio could be used to test if there are any
+# differences in the condition effect between the genotypes.
+## Interaction effect with LRT test
+group.x.cond <- nbinomLRT(dds,reduced=~source_name + Condition)
+group.x.cond.res <- results(group.x.cond)
+tab.group.x.cond <- table(group.x.cond.res$padj < 0.05)
+tab.group.x.cond
+#FALSE  TRUE 
+# 5152  1903 
+
+sigE_diff <- as_tibble(group.x.cond.res, rownames="gene_ID")
+#changes in phoR, phoP and putative_sRNA:m852286_852683 expression in genotype due to interaction effect (phosphate level)
+genes <- c("gene:Rv0757", "gene:Rv0758", "putative_sRNA:m852286_852683")
+sigE_diff %>% filter(gene_ID %in% genes)
+# no significant difference in effect of condition between genotypes
+#log2FC=0.22, padj=0.65
+
+
+# the interaction term, answering: is the condition (interaction) effect *different* across genotypes? (not testing how condition effects particular genotype)
+# only represents effect of condition for the *reference level* of geneotype--*difference* between condition effect on sigE and condition effect on H37Rv (same results as likelihood test above)
+#res_des <- results(dds, name="source_nameST28.Conditionlow_phosphate")
+#contrast is linear model
+#sigE_diff_contrast <- as_tibble(res_des, rownames="gene_ID")
+#sigE_diff_contrast %>% filter(gene_ID %in% genes)
+
+#png(here("images/MAplot_interaction_term.png"))
+plotMA(res_des, ylim=c(-4,4), main="condition effect delta sigE v H37Rv")
+#dev.off()
+
+
+#condition effect for sigE mutant (main effect plus interaction term)
+#(the extra condition effect in sigE mutant compared to H37Rv)
+res_sigE <- results(dds, list(
+  c("Condition_low_phosphate_vs_high_phosphate",
+    "source_nameST28.Conditionlow_phosphate") ))
+#png(here("images/MA_plot_cond_effect_sigE.png"))
+plotMA(res_sigE, ylim=c(-4,4), main="condition effect delta sigE")
+#dev.off()
+
+genes <- c("gene:Rv0757", "gene:Rv0758", "putative_sRNA:m852286_852683")
+res_sigE.df <- as_tibble(res_sigE, rownames="gene_ID")
+res_sigE.df %>% filter(gene_ID %in% genes)
+#no extra effect in sigE vs h37Rv baseline (l2FC=-0.42, padj=0.13)
+
+
+#plot differences in 3 genes
+d <- plotCounts(dds, gene=genes[1], intgroup=c("Condition", "source_name"), transform = T, pc=1, returnData=TRUE)
+d_tib_1 <- as_tibble(d, rownames="sample") %>% mutate(gene=genes[1])
+
+d_2 <- plotCounts(dds, gene=genes[2], intgroup=c("Condition", "source_name"), transform = T, pc=1, returnData=TRUE)
+d_tib_2 <- as_tibble(d_2, rownames="sample") %>% mutate(gene=genes[2])
+
+d_3 <-  plotCounts(dds, gene=genes[3], intgroup=c("Condition", "source_name"), transform = T, pc=1, returnData=TRUE)
+d_tib_3 <- as_tibble(d_3, rownames="sample") %>% mutate(gene=genes[3])
+
+d_all <- rbind(d_tib_1, d_tib_2, d_tib_3)
+
+p <- ggplot(d_all, aes(x=Condition, y=count, label=sample, group=gene)) +
+  geom_point() +
+  #geom_text() +
+  scale_y_log10(breaks=c(25,100,400)) +
+  facet_grid(source_name ~ gene) +
+  ylab("normalised counts") +
+  ggtitle("Expression of genes in H37Rv WT and ∆sigE mutant") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p
+
+#ggsave(here("images/specific_condition_effects.png"), p)
+
+```
+
+Very slight difference in how low phosphate condition effects phoR/phoP/asPhoR in sigE mutant but not significant padj. Perhaps mutant expression of antisense less affected by low phosphate than WT?
+
+Plot shows very similar pattern of expression between the two genotypes.
+
+
+Alternative approach? (not entirely useful for comparing difference, but easy for looking at effect of condition on specific genotype)
+
+Many users begin to add interaction terms to the design formula, when in fact a much simpler approach would
+give all the results tables that are desired. We will explain this approach first, because it is much simpler to
+perform. If the comparisons of interest are, for example, the effect of a condition for different sets of samples,
+a simpler approach than adding interaction terms explicitly to the design formula is to perform the following
+steps:
+1. combine the factors of interest into a single factor with all combinations of the original factors
+2. change the design to include just this factor, e.g. ∼ group
+
+Using this design is similar to adding an interaction term, in that it models multiple condition effects which
+can be easily extracted with results. Suppose we have two factors genotype (with values I, II, and III) and
+condition (with values A and B), and we want to extract the condition effect specifically for each genotype.
+We could use the following approach to obtain, e.g. the condition effect for genotype I:
+
+```
+dds$group <- factor(paste0(dds$genotype, dds$condition))
+design(dds) <- ~ group
+dds <- DESeq(dds)
+resultsNames(dds)
+results(dds, contrast=c("group", "IA", "IB"))
+```
+Re-run deseq with grouping variable. This only gives you the condition effect for a particular genotype. NOT does interaction effect differ by genotype
+
+```{r deseq_analysis_group}
+# This is a useful construction when users just want to compare
+# specific groups which are combinations of variables.
+
+library(DESeq2)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(ggsignif)
+
+#change design of deseq
+dds_new <- dds
+dds_new$group <- factor(paste0(dds$source_name, dds$Condition))
+design(dds_new) <- ~ group
+dds_new <- DESeq(dds_new)
+resultsNames(dds_new)
+
+# genotpye effect for H37Rv low vs sigE mutant low
+res_group <- results(dds_new, contrast=c("group", "H37Rvlow_phosphate", "ST28low_phosphate"))
+#png(here("images/MAplot_gene_group.png"))
+plotMA(res_group, ylim=c(-4,4), main="low_phosphate in sigE v WT")
+#dev.off()
+res_gen_effect_low <- as_tibble(res_group, rownames="gene_id")
+res_gen_effect_low %>% filter(gene_id %in% genes)
+# no difference in genotypes response to low phosphate effect 
+#l2FC=0.13, padj=0.72
+
+res_group <- results(dds_new, contrast=c("group", "H37Rvhigh_phosphate", "ST28high_phosphate"))
+res_gene_effect_high <- as_tibble(res_group, rownames="gene_id") %>% filter(gene_id %in% genes)
+res_gene_effect_high
+#at high phosphate level, there is no difference in expression of antisense between the two strains (log2FC=0.351, padj=0.23)
+
+# condition effect for sigE mutant (same as res_sigE above)
+res_cond <- results(dds_new, contrast= c("group", "ST28low_phosphate", "ST28high_phosphate"))
+#png(here("images/MAplot_sigE_conditions.png"))
+plotMA(res_cond, ylim=c(-4,4), main="condition effect delta sigE")
+#dev.off()
+
+#high vs low phosphate for sigE mutant
+res_condition_sigE <- as_tibble(res_cond, rownames="gene_id")
+res_condition_sigE %>% filter(gene_id %in% genes)
+#no significant differences in sigE in high vs low phosphate
+#log2FC = -0.42, padj=0.135
+
+#high vs low for H37Rv
+res_cond_H37Rv <- results(dds_new, contrast= c("group", "H37Rvlow_phosphate", "H37Rvhigh_phosphate"))
+res_cond_H37Rv.df <- as_tibble(res_cond_H37Rv, rownames="gene_id")
+res_cond_H37Rv.df %>% filter(gene_id %in% genes)
+# significant difference in antisense phoR change in low v high in H37Rv
+#log2FC=-0.64, padj=0.013
+
+#changes in antisense expression between H37Rv and sigE del
+plotCounts(dds_new, gene=genes[3], intgroup=c("source_name"), transform = T, pc=1)
+
+d_main <- plotCounts(dds, gene=genes[3], intgroup=c("source_name", "Condition"), transform = T, pc=1, returnData=TRUE)
+d_tib_main <- as_tibble(d_main, rownames="sample") 
+
+# pval.df <- tibble(group1=c("H37Rv.high_phosphate", "ST28.high_phosphate", "H37Rv.high_phosphate", "H37Rv.low_phosphate"), group2=c("H37Rv.low_phosphate", "ST28.low_phosphate", "ST28.high_phosphate", "ST28.low_phosphate"), p.adj = c(0.013, 0.13, 0.23, 0.72), y.position = c(1600, 1100, 1700, 1250))
+# 
+# pval.df2 <- tibble(group1=c("H37Rv"), group2="ST28", p.adj=0.013, y.position=1600)
+
+#ggplot(d_tib_main, aes(x=source_name, y=count)) +
+#      geom_col(position="dodge", aes(fill=Condition)) +
+      #stat_pvalue_manual(pval.df, label = "p.adj") +
+      #scale_y_log10(breaks=c(25,100,400)) +
+#      ylab("normalised counts") +
+#      ggtitle("Expression of antisense phoR")
+
+#ggsave(here("images/expr_asphoR_barplot.png"))
+
+#try boxplot instead?
+d_tib_main_group <- d_tib_main %>% mutate(group_name=paste(source_name, Condition, sep=".")) %>% mutate(p.value = c())
+
+ggplot(d_tib_main_group, aes(x=source_name, y=count, group=group_name, fill=Condition)) +
+  geom_boxplot() +
+  geom_signif(
+    y_position = c(1550, 1100), xmin = c(0.8, 1.8), xmax = c(1.2, 2.2),
+    annotation = c("0.013", "NS"), tip_length = 0) +
+  ylim(0, 1800) +
+  geom_signif(
+    y_position = c(1700, 1250), xmin = c(0.8, 1.2), xmax = c(1.8, 2.2),
+    annotation = c("NS", "NS"), tip_length = 0) +
+  ggtitle("Comparison of expression of antisense_phoR", subtitle="(adj p-value for log2FC)") +
+  ylab("normalised counts")
+ggsave(here("images/as_phoR_sigE_deletion_boxplot.png"))  
+
+
+ggplot(d_tib_main_group, aes(x=source_name, y=count, group=group_name, fill=Condition)) +
+  geom_col(position="dodge", aes(fill=Condition)) +
+  geom_signif(
+    y_position = c(1550, 1100), xmin = c(0.8, 1.8), xmax = c(1.2, 2.2),
+    annotation = c("0.013", "NS"), tip_length = 0) +
+  ylim(0, 1800) +
+  geom_signif(
+    y_position = c(1700, 1250), xmin = c(0.8, 1.2), xmax = c(1.8, 2.2),
+    annotation = c("NS", "NS"), tip_length = 0)
+  
+#log2fc between groups 
+change.df <- tibble(group1 = c("H37Rv", "ST28", "H37Rv", "ST28"), group2=c("H37Rv", "ST28", "ST28", "ST28"), condition1=c("high", "high", "high", "low"), condition2=c("low", "low", "high", "low"), log2FC=c(-0.64, -0.42, 0.35, 0.13), p_adj=c(0.013, 0.13, 0.23, 0.72))
+change.df <- change.df %>% mutate(groupA=paste(group1, condition1, sep="."), groupB = paste(group2, condition2, sep="." ))
+
+
+```
+Perhaps the boxplots aren't the best way to show this effect. Also, might not be that convincing with only 3 samples.  Maybe download remaining time points and graph those as well.

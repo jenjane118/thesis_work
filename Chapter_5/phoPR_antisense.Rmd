@@ -1,0 +1,1657 @@
+---
+title: "phoPR_antisense"
+output: html_notebook
+---
+
+Date: 24 October 2023 
+Author: Jennifer J. Stiens 
+[j.j.stiens\@gmail.com](mailto:j.j.stiens@gmail.com){.email}
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+i_am("as_phoR.Rproj")
+
+library(here)
+library(tidyverse)
+
+#couldn't install rsubread on conda
+if (!requireNamespace("BiocManager", quietly = TRUE))
+#install.packages("BiocManager")
+#BiocManager::install("Rsubread")
+library(Rsubread)
+#install.packages("devtools")
+library(devtools)
+devtools::install_github("irilenia/baerhunter", dependencies=F)
+library(baerhunter)
+```
+
+
+Design primers for antisense to phoR for use in qRT-PCR
+
+[primer design](https://primer3.ut.ee)
+
+These all seem to have quite low Tm? Needs to be between 65-70 ideally?
+
+[primer design hints](https://www.thermofisher.com/uk/en/home/life-science/oligonucleotides-primers-probes-genes/custom-dna-oligos/oligo-design-tools.html?s_kwcid=AL!3652!3!506621651454!p!!g!!design%20primer&ef_id=CjwKCAjw79iaBhAJEiwAPYwoCIXJ38TzqeEpKF4iJYYclW-7kdgw9XVU59Ffuy6kp4J6ar_2rHf6LhoCP4AQAvD_BwE:G:s&s_kwcid=AL!3652!3!506621651454!p!!g!!design%20primer!12555269437!117284658457&cid=bid_mol_pch_r01_co_cp1358_pjt0000_bid00000_0se_gaw_nt_pur_con&gclid=CjwKCAjw79iaBhAJEiwAPYwoCIXJ38TzqeEpKF4iJYYclW-7kdgw9XVU59Ffuy6kp4J6ar_2rHf6LhoCP4AQAvD_BwE)
+
+
+[primer blast](https://www.ncbi.nlm.nih.gov/tools/primer-blast/primertool.cgi)
+
+Worked out two possibilities, but I think we just need one? unless we want a second pair in case first doesn't work?
+
+![primer possibilities](images/as_phoR_primer2.png)
+
+
+We ordered both of these.
+
+
+# Designing guide RNAs (sgRNA) for CRISPRi
+
+See word doc and excel sheet
+
+Not a whole lot of PAM sites at start of phoR. Design some to stop initiation (on template strand vs non-template strand)
+
+Is there initiation before phoR--ie is there a TSS?
+
+TSSs in phoPR
+
+851607 +
+851739 -
+852061 +
+852612 +
+
+AL123456.3	851608	851609	TSSp932	51.165	+	LL	Rv0757	phoP
+AL123456.3	851735	851736	TSSm710	88.6152	-	A	Rv0757	phoP
+AL123456.3	851736	851737	TSSm711	579.762	-	A	Rv0757	phoP
+AL123456.3	851737	851738	TSSm712	256.54	-	A	Rv0757	phoP
+AL123456.3	852682	852683	TSSm714	63.6687	-	A	Rv0758	phoR
+
+Not going to do this afterall--instead find place DS of our antisense that is still opposite phoR to use as control--make sure dcas9 isn't interfering with transcription elongation on opposite strand.
+
+Exported a 400nt sequence antisense to Downstream section of phoR
+
+30 March, 2023
+
+Want to look at TSS's mapped to Mbovis to see if there is a TSS in same place in Mbovis as_phoR
+
+Exponentially growing cultures only
+
+```{r dinan_bovis_tss}
+library(tidyverse)
+bovis_tss <- read_csv(here("TSS_data/Dinan_TSS_bovis.csv"), col_names = TRUE)
+#look for TSS in region of phoR and phoP on - strand
+bovis_tss %>% filter(TSS>853700 & TSS<856500) 
+
+
+```
+
+"promoter type" -10 box means it is typical consensus −10 hexamer motif (TANNNT) at 854784 (in tb it is at 852683)
+
+854250 should be internal for phoP rather than primary for phoR? 
+
+
+antisense phoR looks much more highly expressed in mbovis stationary than in mtb stationary culture. Also, in mbovis, phoPR expression is more suppressed.
+
+Mtb asphoR: blue is stationary and black is exponential (SRR5689226 and SRR5689224 from same project, PRJNA390669)
+
+![artemis stationary mtb](images/mtb_asphoR_exp_staty.png)
+Mbovis exponential and stationary: blue stationary, pink exponential (SRR16574976, SRR18961402). From two different projects in Stephen's lab. stationary sequenced single-ended, while exponential is paired end, so maybe less exciting difference?
+
+![mbovis_stationary](images/mbovis_asPhoR.png)
+Downloaded more rolling samples from same experiment as stationary (PRJNA774648) though sequenced with paired-end
+
+```
+flagstat_SRR16574967.txt
+15830266 + 0 primary mapped (99.95% : N/A)
+flagstat_SRR16574968.txt
+19575619 + 0 primary mapped (99.95% : N/A)
+flagstat_SRR16574969.txt
+16588560 + 0 primary mapped (99.80% : N/A)
+```
+
+Looks pretty much the same with these rolling culture files, though in this rolling culture, the original trancript is a bit longer with another peak antisense to phoP
+
+![mbovis_stationary_rolling](images/PRJNA774648.png)
+
+5 April, 2023
+
+Interested in study by Zhou et al (from Shell lab) that looks at a RNase E knockdown in Msmeg. But it also makes a cleavage map in Mtb
+
+[Zhou et al, 2023](https://www.biorxiv.org/content/10.1101/2023.03.14.532454v1)
+
+Supplemental table S5A have high-confidence cleavage sites in Mtb from differential ligation approach. S5B-H has TSSs mapped to genes and operon predictions based on TSS locations.
+
+Found that in Mtb, as well as in Msmeg, there is evidence that RNase E has preference for Cytidine-rich regions, esp upstream from uracil (RN*CNU)--not sure about how convincing this part is for Mtb.
+
+```{r explore_zhou_supp}
+library(dplyr)
+library(readxl)
+
+relax_cleavage <- read_csv(here("annotation_data/Zhou_cleavage_mtb_relaxed.csv"), skip=1, col_names = T)
+colnames(relax_cleavage) <- c("strand", "coord_5prime", "mean_covg_ratio", "Ln_mean_ratio", "mean_covg_converted", "sequence", "base_5_end_cleaved")
+
+excel_sheets(here("annotation_data/Zhou_supp5.xlsx"))
+cleavage <- read_excel(here("annotation_data/Zhou_supp5.xlsx"), sheet = "S5A Mtb cleavage sites", skip=1)
+colnames(cleavage) <- c("site_ID", "strand", "coord_5prime", "mean_covg_converted", "mean_covg_ratio", "ov_opposite_str_gene", "ov_same_str_gene", "position_ov", "position_ratio", "sequence_context", "codon_position", "base_US_r_end", "base_5_end_cleaved")
+head(cleavage)
+
+
+#coordinates of phoPR/asphoR
+start = 851000
+end = 853853
+
+cleavage %>% filter(coord_5prime < end & coord_5prime > start)
+relax_cleavage %>% filter(coord_5prime < end & coord_5prime > start)
+
+#coordinates Rv0072-75
+start = 80240
+end = 85572
+glut_trans <- cleavage %>% filter(coord_5prime < end & coord_5prime > start)
+View(glut_trans)
+
+#coordinates Rv3157-3158
+start = 3523269
+end = 3526178
+nuo <- cleavage %>% filter(coord_5prime < end & coord_5prime > start)
+nuo
+
+```
+
+All of the cleavage sites are on + strand
+
+852193 and 852199 are in middle of phoP, near where antisense ends.
+
+Cleavage site 852354, are right at end of phoP.
+
+hi-confidence 853361 at end of phoR
+
+This study also recogises 'internal' TSS in phoR:  
+852936+	+	852936	Rv0758	0.37
+This is quite a bit downstream from start of antisense phoR and snp
+
+![cleavage map mtb](images/cleavage_sites.png)
+Zhou et al report a few 'high confidence' cleavage sites in the area, two within phoP (852193 and 852199) which is in the vicinity of the 3' end of the antisense and one at the end of phoP. Cleavage of phoP could account for the 'bumpy' look of the transcript in RNA-seq. Interesting to think about in terms of antisense RNA 'decoupling' the phoP/phoR operon, or even portions of the phoP and phoR mRNAs by differentially stabilising portions of the polycistronic transcript, perhaps in response to certain conditions. They don't have any 'intergenic' cleavage sites reported for antisense.
+
+They mention that they have found two pairs of polycistronic M.smeg genes with cleavage sites between genes and observed differential stabilities upstream/downstream of the cleavage site
+
+RNase E cleaves at single stranded portions of genome. so antisense binding could potentially protect from rnaseE degradation.
+
+In bovis stationary culture, highly expressed antisense entire length of phop and start of phoR--but lower expression of phoPR. Could binding to transcript mark for destruction by another rnase that targets double stranded regions (RNase III)? When is RNase III expressed?
+
+Looked at another paper re antisense regulation of a toxin/antitoxin pair that were responsive to crp binding (c-AMP regulated protein)
+
+[Dawson et al](https://onlinelibrary.wiley.com/doi/full/10.1111/mmi.14917)
+
+cAMP levels change with low pH + nutrient limitation and the transcription of relBE2 and the antisense were differentially regulated by cAMP
+
+chip-seq binding study for crp:
+
+[crp binding](https://academic.oup.com/nar/article/42/13/8320/1288342?login=false#supplementary-data)
+
+Evidently in model orgs, crp binding close to TSS is inhibiting transcription, but upstream enhances txn
+
+Looked for Crp binding sites in phoPR and antisense
+
+looked for GAg/cN(8)CAC
+
+phoP:  
+GAAAACACCACAC 852198-852210 which is just about on top of cleavage site noted above at 852193 (+)
+
+phoR:
+GATgttgcagCAC (missing one in-between base?) 100nt upstream of internal TSS, 852503-852515 (+)
+
+antisense to phoR: GACctgcaacagCAC (one extra in between?) 178 nt upstream of TSS, 
+852340-852359 (-)
+
+Also interesting there is one internal to Rv0756c (cons hypothetical) which seems to come a 100 nt or so before with internal peaks of coverage. There is a large antisense RNA associated with that protein. the antisense (putative_sRNA:p850699_851096) is in darkorange2 module, MM = 0.7, this module has espACD, pks2 and other cell wall genes. Rv0756c is in darkturquoise module, MM = 0.79 (with as_phoR).
+
+![crp sites](images/crp_sites.png)
+
+# Sequencing of CRISPRi mutants
+
+Originally used incorrect gff for counting reads to features (combined_gffs_01_03.gff3). This one had some overlapping non-coding features. Re-did feature counting on 15-04-24 with the correct gff  (comb_filtered_ov_30_11.gff3) and resulting data: all_features_150424_Counts.csv
+
+
+```{r count_reads_test}
+library(baerhunter)
+
+bamDir <- "/Volumes/Data_disk/as_phor_rna/sgrna_removed_reads"
+annDir <- "~/myco_projects/bh_gffs/"
+annFile <- "comb_filtered_ov_30_11.gff3"
+outDir <- here("counts")
+outName <- "test0803"
+chr_file <- here("annotations/Chromosome.txt")
+
+count_features(bam_dir=bamDir, 
+               annotation_dir=annDir, 
+               annotation_file=annFile, 
+               output_dir=outDir, 
+               output_filename=outName, 
+               chromosome_alias_file=chr_file, 
+               strandedness="reversely stranded", 
+               is_paired_end=T, 
+               excl_rna=T)
+
+
+outName<- "test_rRNA"
+count_features(bam_dir=bamDir, 
+               annotation_dir=annDir, 
+               annotation_file=annFile, 
+               output_dir=outDir, 
+               output_filename=outName, 
+               chromosome_alias_file=chr_file, 
+               strandedness="reversely stranded", 
+               is_paired_end=T, 
+               excl_rna=F)
+
+```
+
+##Data exploration
+
+Determine whether including rRNA reads skews read counts in any of the samples
+
+Plot rRNA vs total number of reads for each sample
+
+```{r rRNA evaluation}
+library(dplyr)
+library(rtracklayer)
+library(plyranges)
+
+#extract reads from rRNA genes only
+#load in counts info
+counts <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")), sep="\t")
+# list of rRNA elements to exclude
+samples <- colnames(counts)
+samples <- sub("_sgrna_out", "", samples)
+mtb_gff <- import("~/myco_projects/ref_seqs/Mtb/Mtb_h37rv.ASM19595v2_AL123456.3.gff3")
+rrna_genes <- as_tibble(mtb_gff %>% filter(type=="rRNA_gene") %>% select(ID))
+rrna_ids <- rrna_genes$ID
+rrna_ids
+
+rrna_counts <- as_tibble(colSums(counts[rownames(counts) %in% rrna_ids,])) %>% mutate(sample = samples) %>% dplyr::rename("rrna_counts" = "value")
+rrna_counts
+
+#rrna_counts <- rrna_counts %>% mutate(gene = rrna_ids) %>% relocate(gene, .before=1)
+#rrna_counts
+
+total_counts <- as_tibble(colSums(counts)) %>% mutate(sample = samples) %>% dplyr::rename("total_counts" = "value")
+total_counts
+
+data <- full_join(rrna_counts, total_counts, by = "sample")
+data
+
+plot(data$total_counts, data$rrna_counts)
+
+ggplot(data, aes(total_counts, rrna_counts, label=sample)) +
+  geom_point() +
+  geom_smooth(method = 'lm') +
+  geom_text(hjust=1)
+ggsave(here("images/rrna_correlation.png"))
+
+```
+It seems like including rRNA counts will not be affecting some samples more than others
+
+## plot PCA of counts
+
+This was run with and without including dcas9 and other integrated pRH2502 counts. 
+
+```{r pca}
+library(DESeq2)
+library(dplyr)
+library(vsn)
+library("pheatmap")
+library("RColorBrewer")
+
+#load in counts info
+#counts <- as.matrix(read.delim(here("counts/mtb_features_150424_Counts.csv")), sep="\t")
+counts <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")), sep="\t")
+head(counts)
+colnames(counts) <- seq(1,12)
+dim(counts)
+
+#read conditions df
+cond.df <- read_csv(here("deseq/conditions.txt"))
+
+#this step defined control samples as the base reference 
+cond.df$treatment <- factor(cond.df$treatment)
+cond.df$plasmid <-factor(cond.df$plasmid)
+cond.df$plasmid <- relevel(cond.df$plasmid, ref="empty")
+cond.df$experiment <- factor(cond.df$experiment)
+cond.df$treatment <- relevel(cond.df$treatment, ref="non")
+
+#check order is same for count data and conditions data
+all(cond.df$sample == colnames(counts))
+
+#construct deseq dataset
+#~ 1 can be used for no design, although users need to remember to switch to another design for differential testing.
+
+dds <- DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+
+#data transformation                              
+vsd <- vst(dds, blind=TRUE)
+rld <- rlog(dds, blind=TRUE)
+#assay retrieves matrix of normalised values
+head(assay(vsd), 3)
+
+#plot standard deviation to see if consistent across all changes (they are with both methods)
+meanSdPlot(assay(vsd))
+meanSdPlot(assay(rld))
+
+#heatmap of normalised counts
+#focus on protein-coding only
+pc_counts <- counts[grepl("gene:Rv", rownames(counts)),]
+
+dds <- DESeqDataSetFromMatrix(countData = round(pc_counts),
+                                   colData = cond.df,
+                                   design = ~ plasmid + treatment)
+
+dds <- estimateSizeFactors(dds)
+vsd <- vst(dds, blind=TRUE)
+select <- order(rowMeans(counts(dds,normalized=TRUE)),
+                decreasing=TRUE)[1:20]
+df <- as.data.frame(colData(dds)[,c("treatment","plasmid", "experiment")])
+pheatmap(assay(vsd)[select,], cluster_rows=FALSE, show_rownames=TRUE,
+         cluster_cols=FALSE, annotation_col=df)
+
+
+#heatmap of sample-to-sample distances
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$treatment, vsd$plasmid, sep="-")
+colnames(sampleDistMatrix) <- vsd$experiment
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+png(here("images/sample_heatmap.png"))
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
+dev.off()
+
+#pca
+plotPCA(vsd, intgroup=c("treatment", "experiment"))
+
+pcaData <- plotPCA(vsd, intgroup=c("treatment", "plasmid", "experiment"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=plasmid, shape=treatment, label=experiment )) +
+  geom_point(size=3) +
+  geom_text(vjust=-1) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+
+pcaData <- plotPCA(rld, intgroup=c("treatment", "plasmid", "experiment"), returnData=TRUE)
+ggplot(pcaData, aes(PC1, PC2, color=plasmid, shape=treatment, label=experiment )) +
+  geom_point(size=3) +
+  geom_text(vjust=-1) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+ggsave(here("images/original_pca.png"))
+```
+
+Clustering by experiment--big batch effects? PC1 seems to be variance on replicate, PC2 seems to separate the points by expression (and variance with induction).
+
+
+do again without the rRNA. Just the same, actually. We are only seeing a few genes different in any of the samples.
+
+
+```{r no rrna}
+library(DESeq2)
+library(dplyr)
+library(vsn)
+library("pheatmap")
+library("RColorBrewer")
+
+#load in counts info
+counts <- as.matrix(read.delim(here("counts/norrna_150424_Counts.csv")), sep="\t")
+head(counts)
+colnames(counts) <- seq(1,12)
+dim(counts)
+
+#focus on protein-coding only
+#pc_counts <- counts[grepl("gene:Rv", rownames(counts)),]
+
+dds <- DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ plasmid + treatment)
+
+dds <- estimateSizeFactors(dds)
+vsd <- vst(dds, blind=TRUE)
+
+#read conditions df
+cond.df <- read_csv(here("deseq/conditions.txt"))
+
+#this step defined control samples as the base reference 
+cond.df$treatment <- factor(cond.df$treatment)
+cond.df$plasmid <-factor(cond.df$plasmid)
+cond.df$plasmid <- relevel(cond.df$plasmid, ref="empty")
+cond.df$experiment <- factor(cond.df$experiment)
+cond.df$treatment <- relevel(cond.df$treatment, ref="non")
+
+#check order is same for count data and conditions data
+all(cond.df$sample == colnames(counts))
+
+#construct deseq dataset
+#~ 1 can be used for no design, although users need to remember to switch to another design for differential testing.
+dds <- DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+
+#data transformation                              
+vsd <- vst(dds, blind=TRUE)
+rld <- rlog(dds, blind=TRUE)
+#assay retrieves matrix of normalised values
+head(assay(vsd), 3)
+
+#plot standard deviation to see if consistent across all changes (they are with both methods)
+meanSdPlot(assay(vsd))
+meanSdPlot(assay(rld))
+
+#heatmap of normalised counts
+#focus on protein-coding only
+pc_counts <- counts[grepl("gene:Rv", rownames(counts)),]
+
+dds <- DESeqDataSetFromMatrix(countData = round(pc_counts),
+                                   colData = cond.df,
+                                   design = ~ plasmid + treatment)
+
+dds <- estimateSizeFactors(dds)
+vsd <- vst(dds, blind=TRUE)
+select <- order(rowMeans(counts(dds,normalized=TRUE)),
+                decreasing=TRUE)[1:20]
+df <- as.data.frame(colData(dds)[,c("treatment","plasmid", "experiment")])
+pheatmap(assay(vsd)[select,], cluster_rows=FALSE, show_rownames=TRUE,
+         cluster_cols=FALSE, annotation_col=df)
+
+
+#heatmap of sample-to-sample distances
+sampleDists <- dist(t(assay(rld)))
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$treatment, vsd$plasmid, sep="-")
+colnames(sampleDistMatrix) <- vsd$experiment
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
+
+
+#pca
+plotPCA(vsd, intgroup=c("treatment", "experiment"))
+
+pcaData <- plotPCA(vsd, intgroup=c("treatment", "plasmid", "experiment"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+vsd_pca <- ggplot(pcaData, aes(PC1, PC2, color=plasmid, shape=treatment, label=experiment )) +
+  geom_point(size=3) +
+  geom_text(vjust=-1) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+ggsave(here("images/vsd_pca_norrna.png"), vsd_pca)
+
+pcaData <- plotPCA(rld, intgroup=c("treatment", "plasmid", "experiment"), returnData=TRUE)
+ggplot(pcaData, aes(PC1, PC2, color=plasmid, shape=treatment, label=experiment )) +
+  geom_point(size=3) +
+  geom_text(vjust=-1) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+
+
+
+
+
+```
+
+
+
+Look at some more plots with all gene elements included (rna but not dcas9)
+
+```{r more pca}
+library(PCAtools)
+library(DESeq2)
+
+#more pca with transformed counts using all gene elements
+# load in conditions info
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+# make all numeric or factors to try to label biplots
+cond_new <- cond.df
+cond_new$sample <- as.numeric(as.character(cond.df$sample))
+cond_new$treatment <- factor(as.character(cond.df$treatment, levels= c("induced", "non")))
+cond_new$plasmid <- factor(as.character(cond.df$plasmid), levels=c("sgrna", "empty"))
+cond_new$plasmid <- as.numeric(as.character(cond.df$plasmid))
+
+#make with all numeric factors (can't use factors fo eigenplot)
+cond_eigen <- cond.df
+cond_eigen$sample <- as.numeric(as.character(cond.df$sample))
+cond_eigen$experiment <- as.numeric(cond.df$experiment)
+cond_eigen$treatment <- as.numeric(cond.df$treatment)
+cond_eigen$plasmid <- as.numeric(cond.df$plasmid)
+
+
+#load in counts info
+counts <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")), sep="\t")
+colnames(counts) <- seq(1,12)
+
+rownames(cond_new)==colnames(counts)
+
+#focus on protein-coding only
+#pc_counts <- counts[grepl("gene:Rv", rownames(counts)),]
+
+#do with all counts (since antisense makes a difference here)
+dds <- DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond_new,
+                                   design = ~ 1)
+
+dds <- estimateSizeFactors(dds)
+vsd <- vst(dds, blind=TRUE)
+rld <- rlog(dds, blind=TRUE)
+
+#project.pca <- prcomp(assay(vsd)) 
+#summary(project.pca) #shows PC1 as 99.75% of variance
+
+#or
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond_new)
+summary(p)
+
+#p <- pca(assay(vsd), metadata = cond_eigen)
+
+#examine samples vs PCs (internal data)
+#p$rotated[1:12,1:12]
+#plot loadings (genes vs pcs)
+#p$loadings[1:5, 1:12]
+
+#Plot the proportion of variance of each component
+png(here("images/screeplot.png"))
+screeplot(p, axisLabSize = 18, titleLabSize = 22)
+dev.off()
+
+#biplots
+biplot(p)
+biplot(p, showLoadings = TRUE,
+    labSize = 2, pointSize = 3, sizeLoadingsNames = 3)
+#Colour by a metadata factor, use a custom label, add lines through origin, and add legend (doesn't work)
+#biplot(p,
+#    lab = p$metadata$experiment,
+    #colby = "treatment",
+    #shape = plasmid,
+    #colkey = c( induced = "pink", non = "yellowgreen"),
+#    hline = 0, vline = 0,
+#    legendPosition = 'right')
+
+#do myself in ggplot since this doesn't work (using most of their code)
+th <- theme_bw(base_size = 24) +
+    theme(
+      legend.background = element_rect(),
+      plot.title = element_text(angle = 0, size = 16,
+        face = 'bold', vjust = 1),
+      plot.subtitle = element_text(angle = 0, size = 12,
+        face = 'plain', vjust = 1),
+      plot.caption = element_text(angle = 0, size = 12,
+        face = 'plain', vjust = 1),
+      axis.text.x = element_text(angle = 0, size = 16,
+        hjust = 0.5, vjust = 0.5),
+      axis.text.y = element_text(angle = 0, size = 16,
+        hjust = 0.5, vjust = 0.5),
+      axis.title = element_text(size=16),
+      legend.position = "right",
+      legend.key = element_blank(),
+      legend.key.size = unit(0.5, 'cm'),
+      legend.text = element_text(size = 12),
+      title = element_text(size = 12),
+      legend.title = element_text(size = 14))
+
+plotobj <- NULL
+plotobj$x <- p$rotated[,'PC1']
+plotobj$y <- p$rotated[,'PC2']
+plotobj$lab <- as.character(p$metadata$experiment)
+plotobj <- as.data.frame(plotobj, stringsAsFactors = FALSE)
+plotobj$col <- p$metadata$plasmid
+plotobj$shape <- p$metadata$treatment
+plot <- ggplot(plotobj, aes(x = x, y = y, color = col, shape=shape, label=lab)) +
+  geom_point(size = 3) +
+  geom_text(hjust= 2, colour="black") +
+  th +
+  xlab("PC1") +
+  ylab("PC2")
+plot        
+
+#pairsplot
+png(here("images/pairs_plot.png"))
+pairsplot(p)
+dev.off()
+pairsplot(p, components = getComponents(p, c(2,3,5,6,8,12)), triangle = FALSE)
+
+#plotloadings show top hits
+png(here("images/plotloadings_1to5.png"))
+plotloadings(p, labSize = 3)
+dev.off
+
+#eigencore plot (looks the same with non-coding)
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond_eigen)
+
+pl_ec <- eigencorplot(p, getComponents(p, 1:12),
+    metavars = c('experiment','plasmid','treatment'))
+png(filename = here("images/eigencorePlot.png"), width = 1080)
+pl_ec
+dev.off()
+
+#plotloadings show top hits in specific PCs
+pl <- plotloadings(p, getComponents(p, c(1:9)), labSize = 3, ylim = c(-0.1,0.1))
+# retains 20 variables incl Rv0758, Rv0073 and Rv0074
+png(here("images/plotloadings.png"), width = 1080)
+pl
+dev.off()
+
+```
+
+PC1 is grouping by experiment, PC2 mostly treatment + experiment, PC3 mostly treatment (aTc), PC5 by plasmid, PC6 is treatment, PC8 plasmid, PC9 treatment
+
+### run with protein coding only
+
+```{r pca_pc_only}
+library(PCAtools)
+library(DESeq2)
+
+#more pca with transformed counts all gene elements
+# load in conditions info
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+# make all numeric or factors to try to label biplots
+cond_new <- cond.df
+cond_new$sample <- as.numeric(as.character(cond.df$sample))
+cond_new$treatment <- factor(as.character(cond.df$treatment, levels= c("induced", "non")))
+cond_new$plasmid <- factor(as.character(cond.df$plasmid), levels=c("sgrna", "empty"))
+cond_new$plasmid <- as.numeric(as.character(cond.df$plasmid))
+
+#make with all numeric factors (can't use factors fo eigenplot)
+cond_eigen <- cond.df
+cond_eigen$sample <- as.numeric(as.character(cond.df$sample))
+cond_eigen$experiment <- as.numeric(cond.df$experiment)
+cond_eigen$treatment <- as.numeric(cond.df$treatment)
+cond_eigen$plasmid <- as.numeric(cond.df$plasmid)
+
+
+#load in counts info
+counts <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")), sep="\t")
+colnames(counts) <- seq(1,12)
+
+rownames(cond_new)==colnames(counts)
+
+#focus on protein-coding only (will also eliminate antisense and dcas9)
+pc_counts <- counts[grepl("gene:Rv", rownames(counts)),]
+dds <- DESeqDataSetFromMatrix(countData = round(pc_counts),
+                                   colData = cond_new,
+                                   design = ~ 1)
+
+dds <- estimateSizeFactors(dds)
+vsd <- vst(dds, blind=TRUE)
+rld <- rlog(dds, blind=TRUE)
+
+#project.pca <- prcomp(assay(vsd)) 
+#summary(project.pca) #shows PC1 as 99.75% of variance
+
+#or
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond_new)
+summary(p)
+
+
+#Plot the proportion of variance of each component
+screeplot(p, axisLabSize = 18, titleLabSize = 22)
+
+
+#biplots
+biplot(p)
+biplot(p, showLoadings = TRUE,
+    labSize = 2, pointSize = 3, sizeLoadingsNames = 3)
+
+th <- theme_bw(base_size = 24) +
+    theme(
+      legend.background = element_rect(),
+      plot.title = element_text(angle = 0, size = 16,
+        face = 'bold', vjust = 1),
+      plot.subtitle = element_text(angle = 0, size = 12,
+        face = 'plain', vjust = 1),
+      plot.caption = element_text(angle = 0, size = 12,
+        face = 'plain', vjust = 1),
+      axis.text.x = element_text(angle = 0, size = 16,
+        hjust = 0.5, vjust = 0.5),
+      axis.text.y = element_text(angle = 0, size = 16,
+        hjust = 0.5, vjust = 0.5),
+      axis.title = element_text(size=16),
+      legend.position = "right",
+      legend.key = element_blank(),
+      legend.key.size = unit(0.5, 'cm'),
+      legend.text = element_text(size = 12),
+      title = element_text(size = 12),
+      legend.title = element_text(size = 14))
+
+plotobj <- NULL
+plotobj$x <- p$rotated[,'PC1']
+plotobj$y <- p$rotated[,'PC2']
+plotobj$lab <- as.character(p$metadata$experiment)
+plotobj <- as.data.frame(plotobj, stringsAsFactors = FALSE)
+plotobj$col <- p$metadata$plasmid
+plotobj$shape <- p$metadata$treatment
+plot <- ggplot(plotobj, aes(x = x, y = y, color = col, shape=shape, label=lab)) +
+  geom_point(size = 3) +
+  geom_text(hjust= 2, colour="black") +
+  th +
+  xlab("PC1") +
+  ylab("PC2")
+plot        
+
+#pairsplot
+pairsplot(p)
+pairsplot(p, components = getComponents(p, c(2,3,5,6,8,12)), triangle = FALSE)
+
+#plotloadings show top hits
+plotloadings(p, labSize = 3)
+
+#eigencore plot (looks the same with non-coding)
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond_eigen)
+
+pl_ec <- eigencorplot(p, getComponents(p, 1:12),
+    metavars = c('experiment','plasmid','treatment'))
+pl_ec
+
+#plotloadings show top hits in specific PCs
+pl <- plotloadings(p, getComponents(p, c(1:9)), labSize = 3, ylim = c(-0.1,0.1))
+pl
+
+
+```
+
+
+
+##run DESeq2 on counts
+
+```{r deseq example}
+library(DESeq2)
+dds <- makeExampleDESeqDataSet(n=100,m=12)
+ dds$genotype <- factor(rep(rep(c("I","II"),each=3),2))
+
+ design(dds) <- ~ genotype + condition + genotype:condition
+ dds <- DESeq(dds) 
+ resultsNames(dds)
+
+ # the condition effect for genotype I (the main effect)
+ results(dds, contrast=c("condition","B","A"))
+
+ # the condition effect for genotype II
+ # this is, by definition, the main effect *plus* the interaction term
+ # (the extra condition effect in genotype II compared to genotype I).
+ results(dds, list( c("condition_B_vs_A","genotypeII.conditionB") ))
+
+ # the interaction term, answering: is the condition effect *different* across genotypes?
+ results(dds, name="genotypeII.conditionB")
+```
+
+
+Create conditions file
+
+```{r }
+library(dplyr)
+
+samples <- c("S1-sgrna2-induced", "S1-sgrna2-non", "S1-vector-induced", "S1-vector-non", "S2-sgrna2-induced", "S2-sgrna2-non", "S2-vector-induced", "S2-vector-non", "S3-sgrna2-non", "S3-sgrna-induced", "S3-vector-induced", "S3-vector-non")
+
+# sample_name treatment plasmid experiment
+cond.df <- tibble(sample=seq(1,12), treatment=c(rep(c("induced", "non"), 6)), plasmid = c(rep(c("sgrna", "sgrna", "empty", "empty"), 3)), experiment = c(1,1,1,1,2,2,2,2,3,3,3,3))
+
+
+cond.df
+
+write_csv(cond.df, here("deseq/conditions.txt"))
+```
+
+from vignettes:
+[deseq2](https://www.bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#differential-expression-analysis)
+
+With no additional arguments to results, the log2 fold change and Wald test p value will be for the last variable in the design formula, and if this is a factor, the comparison will be the last level of this variable over the reference level (see previous note on factor levels). However, the order of the variables of the design do not matter so long as the user specifies the comparison to build a results table for, using the name or contrast arguments of results.
+
+Results with different designs.
+
+Single factor just comparing sgrna samples with/without induction
+
+```{r single factor design for pairwise}
+library(DESeq2)
+library(dplyr)
+library(apeglm)
+
+#pairwise induced sgrna vs non-induced sgrna
+
+# load in conditions info
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+cond_simple <- cond.df %>% filter(plasmid=="sgrna")
+cond_simple$treatment <- factor(cond_simple$treatment)
+cond_simple$treatment <- relevel(cond_simple$treatment, ref="non")
+
+#load in counts info
+counts <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")), sep="\t")
+#remove all but non-induced vs induced sgrna samples
+counts_simple <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")) %>% select(c(cond_simple$sample)) )
+colnames(counts_simple) <- cond_simple$sample
+head(counts_simple)
+
+dds_sgrna<-DESeqDataSetFromMatrix(countData = round(counts_simple),
+                                   colData = cond_simple,
+                                   design = ~ treatment)
+dds_sgrna <- DESeq(dds_sgrna)
+resultsNames(dds_sgrna)                            
+#"Intercept"                "treatment_induced_vs_non"
+res_sgrna <- results(dds_sgrna)
+
+#shrink log-fold-changes for better visualisation
+resLFC_sgrna <- lfcShrink(dds_sgrna, coef="treatment_induced_vs_non", type="apeglm")
+
+
+res_sgrna.df <- as.data.frame(res_sgrna)
+as_tibble(res_sgrna.df, rownames="gene_locus") %>% filter(padj < 0.05) %>% arrange(log2FoldChange)
+#39 hits including asphor and phor as top downregulated (no Rv0072 etc)
+
+res05_sgrna <- results(dds_sgrna, alpha=0.05)
+summary(res05_sgrna)
+sum(res05_sgrna$padj < 0.05, na.rm=TRUE)
+
+plotMA(res_sgrna, ylim=c(-2,2))
+plotMA(resLFC_sgrna, ylim=c(-2,2))
+
+plotCounts(dds_sgrna, gene=which.min(res_sgrna$padj), intgroup="treatment")
+#Rv0758
+plotCounts(dds_sgrna, gene="gene:Rv3251c", intgroup="treatment")
+#all treated are upregulated
+plotCounts(dds_sgrna, gene="gene:Rv0072", intgroup="treatment")
+#mean slightly higher in non-induced than induced
+plotCounts(dds_sgrna, gene="putative_sRNA:m852354_852670", intgroup="treatment")
+#all untreated are downregulated
+```
+
+
+
+```{r pairwise induced sgrna v induced empty vector}
+library(DESeq2)
+library(dplyr)
+library(apeglm)
+
+# load in conditions info
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+#pairwise induced sgrna vs induced empty vector
+cond_induced.df <- cond.df %>% filter(treatment=="induced")
+cond_induced.df$plasmid <- factor(cond_induced.df$plasmid)
+cond_induced.df$plasmid <- relevel(cond_induced.df$plasmid, ref="empty")
+
+#counts 
+#remove all non-induced samples
+counts_induced <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")) %>% select(c(cond_induced.df$sample)) )
+colnames(counts_induced) <- cond_induced.df$plasmid
+
+dds_induced<-DESeqDataSetFromMatrix(countData = round(counts_induced),
+                                   colData = cond_induced.df,
+                                   design = ~ plasmid)
+dds_induced <- DESeq(dds_induced)
+resultsNames(dds_induced)                            
+#"Intercept"                "plasmid_sgrna_vs_empty"
+res_induced <- results(dds_induced)
+resLFC_induced <- lfcShrink(dds_induced, coef="plasmid_sgrna_vs_empty", type="apeglm")
+res05_induced <- results(dds_induced, alpha=0.05)
+summary(res05_induced)
+sum(res05_induced$padj < 0.05, na.rm=TRUE)
+#15 gene hits, 13 up and 2 down
+# downregulated phoR and antisense (only ones)
+# upregulated Rv0072-0075 (more in sgrna than in empty vector in induced)
+plotMA(res_induced, ylim=c(-2,2))
+plotMA(resLFC_induced, ylim=c(-2,2))
+
+res_induced.df <- as.data.frame(res)
+as_tibble(res_induced.df, rownames="gene_locus") %>% filter(padj < 0.05) %>% arrange(log2FoldChange)
+
+plotCounts(dds_induced, gene=which.min(res_induced$padj), intgroup="plasmid")
+#Rv0073
+plotCounts(dds_induced, gene="gene:Rv3251c", intgroup="plasmid")
+#these are much more spread out between groups than with sgrna induced v non
+plotCounts(dds_induced, gene="gene:Rv0072", intgroup="plasmid")
+#this is huge difference between the plasmids (more highly expressed in sgrna)
+plotCounts(dds_induced, gene="putative_sRNA:m852354_852670", intgroup="plasmid")
+plotCounts(dds_induced, gene="gene:Rv0758", intgroup="plasmid")
+# sgrna vs empty vector same effect as inducing with sgrna (which is ideal)
+```
+
+
+
+
+```{r pairwise empty vector induced v non-induced}
+library(DESeq2)
+library(dplyr)
+library(apeglm)
+
+# load in conditions info
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+#pairwise induced/non-induced empty vector
+cond_vector.df <- cond.df %>% filter(plasmid=="empty")
+cond_vector.df$treatment <- factor(cond_vector.df$treatment)
+cond_vector.df$treatment <- relevel(cond_vector.df$treatment, ref="non")
+cond_vector.df
+
+#counts 
+#remove all but non-induced vs induced sgrna samples
+counts_vector <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")) %>% select(c(cond_vector.df$sample)) )
+colnames(counts_vector) <- cond_vector.df$sample
+head(counts_vector)
+
+dds_vector<-DESeqDataSetFromMatrix(countData = round(counts_vector),
+                                   colData = cond_vector.df,
+                                   design = ~ treatment)
+dds_vector <- DESeq(dds_vector)
+resultsNames(dds_vector)                            
+#"Intercept"                "treatment_induced_vs_non"
+res_vector <- results(dds_vector)
+res.df <- as.data.frame(res_vector)
+as_tibble(res.df, rownames="gene_locus") %>% filter(padj < 0.054) %>% arrange(log2FoldChange)
+#36 genes with lg2fc including Rv0072-0075 as DOWNregulated (less expression in induced empty vector compared to non-induced)
+resLFC_vector <- lfcShrink(dds_vector, coef="treatment_induced_vs_non", type="apeglm")
+
+res05 <- results(dds_vector, alpha=0.05)
+summary(res05)
+sum(res05$padj < 0.05, na.rm=TRUE)
+#get 39 genes, antisense and phoR non-signif
+
+plotMA(res_vector, ylim=c(-2,2))
+plotMA(resLFC_vector, ylim=c(-2,2))
+
+plotCounts(dds_vector, gene=which.min(res_vector$padj), intgroup="treatment")
+#Rv0073
+plotCounts(dds_vector, gene=which.max(res_vector$log2FoldChange), intgroup="treatment")
+
+plotCounts(dds_vector, gene="gene:Rv3251c", intgroup="treatment")
+#all treated are somewhat upregulated (lfc=1.17)
+plotCounts(dds_vector, gene="gene:Rv0073", intgroup="treatment")
+#all treated are downregulated, obvious effect for Rv0072 etc
+plotCounts(dds_vector, gene="gene:Rv0076c", intgroup="treatment")
+#induced somehwat downregulated (significant)
+```
+
+```{r pairwise non-induced sgrna v empty}
+library(DESeq2)
+library(dplyr)
+library(apeglm)
+
+# load in conditions info
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+#pairwise non-induced sgrna vs non-induced vector
+cond_non.df <- cond.df %>% filter(treatment=="non")
+cond_non.df$plasmid <- factor(cond_non.df$plasmid)
+cond_non.df$plasmid <- relevel(cond_non.df$plasmid, ref="empty")
+
+#counts 
+#remove all but non-induced samples
+counts_non <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")) %>% select(c(cond_non.df$sample)) )
+colnames(counts_non) <- cond_non.df$sample
+#head(counts_non)
+
+dds_non<-DESeqDataSetFromMatrix(countData = round(counts_non),
+                                   colData = cond_non.df,
+                                   design = ~ plasmid)
+dds_non <- DESeq(dds_non)
+resultsNames(dds_non)                            
+#"Intercept"                "treatment_induced_vs_non"
+res_non <- results(dds_non)
+
+res05 <- results(dds_non, alpha=0.05)
+summary(res05)
+sum(res05$padj < 0.05, na.rm=TRUE)
+# only one different 
+
+plotCounts(dds_non, gene=which.max(res_non$log2FoldChange), intgroup = "plasmid")
+
+```
+INduced/non-induced sgrna:  39 hits including asphor and phor as top downregulated (no Rv0072 etc). No consideration of dcas9 on its own.
+
+Induced sgrna vs Induced vector: 15 genes with lg2fc, downregulated phoR and antisense, upregulated Rv0072-0075 (more in sgrna than in empty vector in induced). This is the true comparison--induced in both and dependent on whether or not antisense present? Doesn't consider effect of aTc
+
+Non-induced sgrna vs non-induced empty vector: one change
+
+Induced vs non-induced empty vector: 36 hits including Rv0072-0075 as DOWNregulated (less expression in induced empty vector compared to non-induced). these genes were UPregulated in induced sgrna vs induced vector. Induction may DECREASE expression of these genes in empty vector, so when compared to induced sgrna, will see an INCREASE of expression in the sgrna induced vs empty induced. NO difference observed in these genes between sgrna induced vs sgrna non-induced.
+
+Could downregulation as a result of induction in induced empty vector be masking effect of antisense inhibition on Rv0072-0075 in the induced sgrna vs induced vector?
+
+## Multifactor designs 
+
+for multifactor, feed in all data into design but can look at pairwise comparisons individually
+
+```{r deseq_multifactor designs}
+library(DESeq2)
+library(dplyr)
+library(apeglm)
+
+#load in counts info
+counts <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")), sep="\t")
+head(counts)
+colnames(counts) <- seq(1,12)
+dim(counts)
+
+#read conditions df
+cond.df <- read_csv(here("deseq/conditions.txt"))
+
+#this step defined control samples as the base reference 
+cond.df$treatment <- factor(cond.df$treatment)
+cond.df$plasmid <-factor(cond.df$plasmid)
+cond.df$plasmid <- relevel(cond.df$plasmid, ref="empty")
+cond.df$experiment <- factor(cond.df$experiment)
+cond.df$treatment <- relevel(cond.df$treatment, ref="non")
+
+#check order is same for count data and conditions data
+all(cond.df$sample == colnames(counts))
+
+saveRDS(cond.df, here("R_data/conditions_df.RData"))
+
+#construct deseq dataset
+#~ 1 can be used for no design, although users need to remember to switch to another design for differential testing.
+dds_asphor<-DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+                              
+# pre-filter reads to exclude rows with very low expression--makes more efficient
+
+smallestGroupSize <- 3 #3 treated samples
+keep <- rowSums(counts(dds_asphor) >= 10) >= smallestGroupSize
+length(keep) #7107 all are above threshold
+
+#with both factors (changes due to either plasmid or treatment, no interaction term, no contrast)
+design(dds_asphor) <- formula(~ plasmid + treatment)
+dds_asphor_noInterax <- DESeq(dds_asphor)
+resultsNames(dds_asphor_noInterax)
+#"Intercept"                "plasmid_sgrna_vs_empty"   "treatment_induced_vs_non"
+res_no_interax <- results(dds_asphor_noInterax)
+res05 <- results(dds_asphor_noInterax, alpha=0.05)
+summary(res05)
+sum(res05$padj < 0.05, na.rm=TRUE)
+#152 (removes outliers)
+res_df <- as.data.frame(res_no_interax)
+as_tibble(res_df, rownames="gene_locus") %>% filter(padj < 0.054) %>% arrange(log2FoldChange)
+#antisense and phoR negative lfc (but > -1) includes all changes in either comparison?
+
+plotMA(res_no_interax, ylim=c(-2,2))
+plotCounts(dds_asphor_noInterax, gene=which.min(res_no_interax$padj), intgroup="treatment")
+#Rv1030, all induced upregulated in every sample
+plotCounts(dds_asphor_noInterax, gene=which.min(res_no_interax$padj), intgroup="plasmid")
+#no difference between the sgrna samples and empty vector samples
+plotCounts(dds_asphor_noInterax, gene=which.max(res_no_interax$log2FoldChange), intgroup="treatment")
+plotCounts(dds_asphor_noInterax, gene=which.max(res_no_interax$log2FoldChange), intgroup="plasmid")
+#bit more effect with induction that with plasmid
+
+plotCounts(dds_asphor_noInterax, gene="gene:Rv3251c", intgroup="treatment")
+plotCounts(dds_asphor_noInterax, gene="gene:Rv3251c", intgroup="plasmid")
+#no difference with plasmid, large difference in induction (no interaction)
+
+plotCounts(dds_asphor_noInterax, gene="gene:Rv0073", intgroup="treatment")
+plotCounts(dds_asphor_noInterax, gene="gene:Rv0073", intgroup="plasmid")
+#shows interaction--all sgrna-induced samples higher but also non-induced empty vector are higher than induced empty vector?
+
+plotCounts(dds_asphor_noInterax, gene="gene:Rv0076c", intgroup="treatment")
+plotCounts(dds_asphor_noInterax, gene="gene:Rv0076c", intgroup="plasmid")
+#interaction of both terms (sgrna clustering and treatment clustering)
+
+#for just treatment, can also use contrast within design
+res_test <- results(dds_asphor_noInterax, contrast=c("treatment", "non", "induced"))
+res05 <- results(dds_asphor_noInterax, contrast=c("treatment", "non", "induced"), alpha=0.05)
+summary(res05)
+sum(res05$padj < 0.05, na.rm=TRUE)
+#138 like above because default will look at last term (treatment)
+
+#for just plasmid
+res_test <- results(dds_asphor_noInterax, contrast=c("plasmid", "empty", "sgrna"))
+res05 <- results(dds_asphor_noInterax, contrast=c("plasmid", "empty", "sgrna"), alpha=0.05)
+summary(res05)
+sum(res05$padj < 0.05, na.rm=TRUE)
+#no significant hits for plasmid contrast alone
+
+```
+from vignette:
+
+The key point to remember about designs with interaction terms is that, unlike for a design ~genotype + condition, where the condition effect represents the overall effect controlling for differences due to genotype, by adding genotype:condition, the main condition effect only represents the effect of condition for the reference level of genotype (I, or whichever level was defined by the user as the reference level). The interaction terms genotypeII.conditionB and genotypeIII.conditionB give *the difference between the condition effect for a given genotype and the condition effect for the reference genotype*.
+
+[Super helpful tutorial](https://github.com/tavareshugo/tutorial_DESeq2_contrasts/blob/main/DESeq2_contrasts.md)
+
+B0 = intercept
+B1 = treatment: induced vs non
+B2 = plasmid: sgrna vs empty
+B3 = treatment:induced.plasmid:sgrna (interaction term)
+
+Using the matrix-based contrasts is more intuitive than defining contrasts using deseq coefficients.
+
+```{r deseq with interaction terms}
+library(DESeq2)
+library(apeglm)
+library(dplyr)
+
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+
+#load in counts info
+counts <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")), sep="\t")
+head(counts)
+colnames(counts) <- seq(1,12)
+dim(counts)
+
+#construct deseq dataset
+#~ 1 can be used for no design, although users need to remember to switch to another design for differential testing.
+dds_asphor<-DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+#with all factors and interaction (the one is added automatically)
+design(dds_asphor) <- formula(~ 1 + treatment + plasmid + treatment:plasmid)
+#design(dds_asphor) <- formula(~ plasmid + treatment + plasmid:treatment)
+dds_asphor <- DESeq(dds_asphor) 
+
+
+resultsNames(dds_asphor)
+
+#"Intercept" (B0)                    "treatment_induced_vs_non" (B1)    
+#"plasmid_sgrna_vs_empty" (B2)       "treatmentinduced.plasmidsgrna" (B3)
+
+
+# get the model matrix (helpful for plots?)
+mod_mat <- model.matrix(design(dds_asphor), colData(dds_asphor))
+mod_mat
+# Define coefficient vectors for each condition (this is doing what I was doing above with pairwise comparisons)
+induced_empty <- colMeans(mod_mat[dds_asphor$treatment == "induced" & dds_asphor$plasmid == "empty", ]) 
+induced_sgrna <- colMeans(mod_mat[dds_asphor$treatment == "induced" & dds_asphor$plasmid == "sgrna", ]) 
+non_empty <- colMeans(mod_mat[dds_asphor$treatment == "non" & dds_asphor$plasmid == "empty", ])
+non_sgrna <- colMeans(mod_mat[dds_asphor$treatment == "non" & dds_asphor$plasmid == "sgrna", ])
+
+# the condition effect for treated vs non-treated for empty vector
+
+#NUll hypothesis B1=0
+res <- results(dds_asphor, contrast = list("treatmentinduced.plasmidsgrna"))
+summary(res)
+
+res <- results(dds_asphor, contrast = induced_empty - non_empty, alpha=0.05)
+summary(res)
+sum(res$padj < 0.05, na.rm=TRUE)
+#53
+# or equivalently
+#res <- results(dds_asphor, contrast = list("treatment_induced_vs_non"))
+#sum(res$padj < 0.05, na.rm=TRUE)
+# same as
+#res_trtmt <- results(dds_asphor, contrast=c("treatment","non", "induced"))
+#res05 <- results(dds_asphor, contrast=c("treatment","non", "induced"), alpha=0.05)
+#summary(res05)
+#sum(res05$padj < 0.05, na.rm=TRUE)
+#46 (using comparison between empty vector (reference) non vs induced)
+
+#this comparison is NOT null (B1 != 0), there is a difference between induced and non-induced empty vector
+
+res_df <- as.data.frame(res)
+as_tibble(res_df, rownames="gene_locus") %>% filter(padj < 0.05) %>% arrange(log2FoldChange)
+
+plotMA(res, ylim=c(-2,2))
+
+plotCounts(dds_asphor, gene=which.min(res$padj), intgroup="treatment")
+#Rv0073, half of induced high half low
+plotCounts(dds_asphor, gene=which.min(res$padj), intgroup="plasmid")
+#all sgrna samples high, empty is half high half low
+#shows interaction--all sgrna-induced samples higher but also non-induced empty vector are higher than induced empty vector?
+plotCounts(dds_asphor, gene="gene:Rv0073", intgroup="treatment")
+plotCounts(dds_asphor, gene="gene:Rv0073", intgroup="plasmid")
+plotCounts(dds_asphor, gene="gene:Rv0076c", intgroup="treatment")
+plotCounts(dds_asphor, gene="gene:Rv0076c", intgroup="plasmid")
+
+plotCounts(dds_asphor, gene=which.max(res_trtmt$log2FoldChange), intgroup="treatment")
+plotCounts(dds_asphor, gene=which.max(res_trtmt$log2FoldChange), intgroup="plasmid")
+#also shows interaction
+
+
+# the condition effect for genotype II
+# this is, by definition, the main effect *plus* the interaction term
+# induced v non with sgrna plasmid 
+#null b1 + b3 = 0
+
+res <- results(dds_asphor, contrast = induced_sgrna - non_sgrna)
+sum(res$padj < 0.05, na.rm=TRUE)
+summary(res$padj < 0.05)
+#49
+# or equivalently
+#res = results(dds_asphor, contrast = list(c("treatment_induced_vs_non", 
+ #                                           "treatmentinduced.plasmidsgrna") ))
+#sum(res$padj < 0.05, na.rm=TRUE)     
+plotMA(res2, ylim=c(-2,2))
+plotMA(res3, ylim=c(-2,2))
+
+res3_05 <- results(dds_asphor, list(c("treatment_induced_vs_non","treatmentinduced.plasmidsgrna") ), alpha=0.05)
+summary(res3_05)
+#49 hits, 45 up, 4 down, doesn't include Rv0073 (v small non-signif change)
+
+# null not proven: there is a difference between induced and non-induced sgrna samples
+
+res_df <- as.data.frame(res)
+as_tibble(res_df, rownames="gene_locus") %>% filter(padj < 0.05) %>% arrange(log2FoldChange)
+
+#antisense ("putative_sRNA:m852354_852670") is most significant change
+plotCounts(dds_asphor, gene=which.min(res2_05$padj), intgroup="treatment")
+plotCounts(dds_asphor, gene=which.min(res2_05$padj), intgroup="plasmid")
+
+plotCounts(dds_asphor, gene=which.max(res2_05$log2FoldChange), intgroup="treatment")
+plotCounts(dds_asphor, gene=which.max(res2_05$log2FoldChange), intgroup="plasmid")
+#empty vector also shows impact of induction here
+
+plotCounts(dds_asphor, gene="gene:Rv0758", intgroup="plasmid")
+plotCounts(dds_asphor, gene="gene:Rv0758", intgroup="treatment")
+
+
+# non induced sgrna vs non induced empty
+#null: B2=0
+
+res1 <- results(dds_asphor, contrast = non_sgrna - non_empty)
+sum(res1$padj < 0.05, na.rm=TRUE)
+#0
+summary(res1)
+# or equivalently
+res2 <- results(dds_asphor, contrast = list(c("plasmid_sgrna_vs_empty")))
+summary(res2)
+
+#null hypothesis is correct: no stat sig difference in non-induced samples
+
+
+#main condition effect on two different genotypes (difference between induced sgrna and induced empty)
+#null hypothesis:  B2 + B3 = 0
+
+res1 <- results(dds_asphor, contrast = induced_sgrna - induced_empty)
+sum(res1$padj < 0.05, na.rm=TRUE)
+# or equivalently
+#res2 <- results(dds_asphor, contrast = list(c("plasmid_sgrna_vs_empty", 
+#                                       "treatmentinduced.plasmidsgrna")))
+#20
+
+res1_df <- as.data.frame(res1)
+
+res2_05 <- results(dds_asphor, contrast = list( c("plasmid_sgrna_vs_empty",
+                                                  "treatmentinduced.plasmidsgrna") ), alpha=0.05)
+summary(res2_05)
+#20 significant hits, 18 up, 2 down
+
+#null is false, there is a difference between induced sgrna vs induced empty
+
+
+
+# the interaction term, answering: is the condition effect *different* across genotypes? 
+# does sgrna and empty vector respond differently to induction with aTc?
+
+#null hypothesis: B3 = 0
+
+res <- results(dds_asphor, 
+                contrast = (induced_sgrna - induced_empty) - (non_sgrna - non_empty))
+summary(res$padj < 0.05)
+#11
+#equivalent to 
+res_interax <- results(dds_asphor, name="treatmentinduced.plasmidsgrna")
+res_interax_05 <- results(dds_asphor, name="treatmentinduced.plasmidsgrna", alpha=0.05)
+summary(res_interax_05)
+#11 hits, 2 down, 9 up
+
+res_interax_df <- as.data.frame(res_interax)
+res_interax_df <- as_tibble(res_interax_df, rownames="gene_locus")
+write_csv(res_interax_df, here("output/interaction_allData.csv"))
+res_interax_df <- as_tibble(res_interax_df, rownames="gene_locus") %>% filter(padj < 0.05) %>% arrange(log2FoldChange)
+write_csv(res_interax_df, here("output/interaction_hits.csv"))
+#10 elements with signif p-values
+# antisense and phoR are ONLY downregulated
+# positive LFC for Rv0072-Rv0075
+#log2 fold change (MLE): plasmidsgrna.treatmentinduced 
+#Wald test p-value: plasmidsgrna.treatmentinduced  
+
+png("images/MAplot_interax.png")
+plotMA(res_interax, ylim=c(-2,2), cex=1)
+abline(h=c(-1,1), col="dodgerblue", lwd=2)
+dev.off()
+
+sig.df <- as_tibble(res_interax_df, rownames="gene_locus") %>% filter(padj < 0.05) %>% arrange(log2FoldChange)
+for (i in 1:10){
+  plotCounts(dds_asphor, gene=sig.df$gene_locus[i], intgroup="treatment")
+  plotCounts(dds_asphor, gene=sig.df$gene_locus[i], intgroup="plasmid")
+}
+
+
+# interaction where I subtract difference between differences in induced sgrna and induced empty?
+res <- results(dds_asphor, 
+                contrast = (induced_sgrna - non_sgrna) - (induced_empty - non_empty))
+summary(res)
+res
+sum(res$padj < 0.05, na.rm=T)
+#10
+res.df <- as.data.frame(res)
+
+#gives exact same results as other interaction 
+```
+Using the interaction term, get 10 hits including inhibition of antisense and phoR, and the Rv0072-0075 operon.
+
+One of the main UPregulated hits with inhibition of antisense (and phoR) is the Rv0072-075 regulon which is a Rv0072-73:Probable glutamine-transport transmembrane protein ABC transporter, Rv0074 is a conserved hypothetical, and Rv0075 is a probably aminotransferase. and UTR between Rv0073 and Rv0074 (putative_UTR:p82669_82747) is most upregulated.
+
+This might be interesting to see with long-read sequencing--is the length of the transcript different?
+
+
+
+Checking for off-target binding of sgrna ccccgacggccagagctata
+
+Didn't bind anywhere else in genome (blasted)
+
+Make better plots to show difference in counts between the Rv0072-75 genes
+
+```{r plotCounts}
+library(DESeq2)
+library(dplyr)
+library(ggplot2)
+library(ggh4x)
+
+# get counts
+#load in counts info
+counts <- as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")), sep="\t")
+head(counts)
+colnames(counts) <- seq(1,12)
+dim(counts)
+
+#read in cond.df
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+
+dds_asphor<-DESeqDataSetFromMatrix(countData = round(counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+#with all factors and interaction (the one is added automatically)
+design(dds_asphor) <- formula(~ 1 + treatment + plasmid + treatment:plasmid)
+#design(dds_asphor) <- formula(~ plasmid + treatment + plasmid:treatment)
+dds_asphor <- DESeq(dds_asphor) 
+
+#using deseq plotCounts
+plotCounts(dds_asphor, gene="gene:Rv0073", intgroup="treatment")
+plotCounts(dds_asphor, gene="gene:Rv0073", intgroup="plasmid")
+plotCounts(dds_asphor, gene="gene:Rv0057", intgroup = "treatment")
+#to use ggplot (and do several genes) make dataframe of info
+
+gene_set <- c("gene:Rv0072", "gene:Rv0073", "gene:Rv0074", "gene:Rv0075")
+
+df <- lapply(gene_set, \(x) {
+    y <- plotCounts(dds_asphor, x, c("treatment", "plasmid"), returnData=TRUE)
+    y$feature <- x
+    return(y)
+})
+df <- do.call(rbind, df)
+df <- df %>% mutate(treatment = case_when(treatment == 'induced' ~ 'ATc-treated',
+  treatment == 'non' ~ 'untreated',),
+  plasmid = case_when(plasmid == 'sgrna' ~ 'MTBdcas9_sgRNA',
+  plasmid == 'empty' ~ 'MTBdcas9_ctrl')) %>%
+  dplyr::rename("strain" = "plasmid")
+#make plot
+ggplot(df, aes(x=treatment, y=count, color=strain)) +
+  #geom_jitter(
+    #position=position_jitterdodge(dodge.width=0.5),
+    #size=0.75) +
+  geom_point(position=position_jitterdodge(dodge.width=0.75), size=0.75) +
+  geom_boxplot(
+    position=position_dodge(width=0.75),
+    fill=NA, width=0.35, outlier.shape=NA) +
+  scale_colour_manual(values = c('MTBdcas9_sgRNA' = "blue", 'MTBdcas9_ctrl' = "green")) +
+  facet_grid(feature~.)
+ggsave(here("images/plot_counts_ABCtrx.png"), width = 6, height=8)
+
+
+#for phoPR
+gene_set <- c("gene:Rv0757", "gene:Rv0758", "putative_sRNA:m852354_852670")
+names(gene_set) <- gene_set
+
+# scales <- list(
+#   # Here you have to specify all the scales, one for each facet row in your case
+#   scale_y_continuous(limits = c(2,10),
+#   scale_y_continuous(breaks = c(3, 4))
+# 
+# qplot(x, value,  data=df, geom=c("smooth")) +
+#  facet_grid(variable ~ ., scale="free_y") +
+#  facetted_pos_scales(y = scales)
+
+df <- lapply(gene_set, \(x) {
+    y <- plotCounts(dds_asphor, x, c("treatment", "plasmid"), returnData=TRUE)
+    y$feature <- x
+    return(y)
+})
+df <- do.call(rbind, df)
+df <- df %>% mutate(treatment = case_when(treatment == 'induced' ~ 'ATc-treated',
+  treatment == 'non' ~ 'untreated',),
+  plasmid = case_when(plasmid == 'sgrna' ~ 'MTBdcas9_sgRNA',
+  plasmid == 'empty' ~ 'MTBdcas9_ctrl')) %>%
+  dplyr::rename("strain" = "plasmid")
+#make plot
+ggplot(df, aes(x=treatment, y=count, color=strain)) +
+  #geom_jitter(
+    #position=position_jitterdodge(dodge.width=0.5),
+    #size=0.75) +
+  geom_point(position=position_jitterdodge(dodge.width=0.75), size=0.75) +
+  geom_boxplot(
+    position=position_dodge(width=0.75),
+    fill=NA, width=0.35, outlier.shape=NA) +
+  scale_colour_manual(values = c('MTBdcas9_sgRNA' = "blue", 'MTBdcas9_ctrl' = "green")) +
+  facet_grid(feature~., scales = "free") 
+ggsave(here("images/plot_counts_phopr.png"), width = 6, height=8)
+
+
+#for antisense treZ
+y <- plotCounts(dds_asphor, "putative_sRNA:p1766474_1766851", c("treatment", "plasmid"), returnData=TRUE)
+y$feature <- x
+ggplot(df, aes(x=treatment, y=count, color=plasmid)) +
+  
+  geom_point(position=position_jitterdodge(dodge.width=0.75), size=0.75) +
+  geom_boxplot(
+    position=position_dodge(width=0.75),
+    fill=NA, width=0.35, outlier.shape=NA) +
+  scale_colour_manual(values = c("sgrna" = "blue", "empty" = "green")) +
+  facet_grid(feature~., scales = "free") 
+ggsave(here("images/plot_counts_as_trez.png"), width = 6, height=8)
+
+```
+
+Looking at dcas9 expression in different samples--need to make sure non-induced. Should look at pca and diff expression with these? But all samples showed same expression of very different genes (Rv0073 operon)
+
+
+## differential sequencing including dCas9 expression to determine fold induction
+
+convert genbank to gff for featureCount
+
+gff format:
+
+AL123456.3	ena	gene	1	1524	.	+	.	ID=gene:Rv0001;Name=dnaA;biotype=protein_coding;description=Chromosomal replication initiator protein DnaA;gene_id=Rv0001;logic_name=ena
+
+chromosome    source    type    start   end   .   strand    .   description
+
+
+
+
+```{r genbank_to_gff}
+chromosome <- "pRH2502_addgene_sequence"
+source = "addgene"
+type = "CDS"
+
+gff <- tibble(chrom = chromosome, source = source, type = "CDS", start=c(1,4117,5407), end=c(4104, 4137,6222) , misc1 = ".", strand = "+", misc2=".", description = c("gene:dcas9", "gene:SV40", "gene:aph"))
+
+write_lines(c("#gff3 pRH2502_addgene_sequence"), here("annotations/pRH2502.gff"))
+write_tsv(gff, here("annotations/pRH2502.gff"), col_names=FALSE, append=TRUE)
+```
+
+
+```{r count plasmid}
+library(Rsubread)
+library(dplyr)
+library(tools)
+library(utils)
+#read text as a SAF dataframe and use featureCounts instead of baerhunter
+gff <- read_delim(here("annotations/pRH2502.gff"), delim="\t", comment = "#", col_names = F)
+colnames(gff) <- c("chromosome", "source", "type", "start", "end", "misc", "strand", "misc2", "gene_id")
+
+#turn to saf form
+# GeneID Chr Start End Strand
+saf <- tibble(GeneID = gff$gene_id, Chr = gff$chromosome, Start = gff$start, End = gff$end, Strand = gff$strand)
+
+
+bamDir <- "/Volumes/Data_disk/as_phor_rna/plasmid_mapped_sorted"
+## Compile a list of BAM files present in the bam directory
+bam_files <- list.files(path = bamDir, pattern = ".BAM$", full.names = TRUE, ignore.case = TRUE)
+## Extract BAM file names without extension.
+sample_names <- c(file_path_sans_ext(basename(bam_files)))
+output_dir <- here("counts")
+output_file  <- paste(output_dir, "prh2502", sep = "/")
+count_file_name <- paste(output_file, "_Counts.csv", sep = "")
+summary_file_name <- paste(output_file, "_Count_summary.csv", sep="")
+
+fc <- featureCounts(files = bam_files,
+              annot.ext = saf,
+              isGTFAnnotationFile = F,
+              chrAliases = chr_file,
+              strandSpecific = 2,
+              isPairedEnd = T,
+              allowMultiOverlap = T,
+              fraction = T)
+
+colnames(fc$counts) <- sample_names
+write.table(fc$counts, count_file_name, sep = "\t")
+colnames(fc$stat) <- c('Status',sample_names)
+write.table(fc$stat, summary_file_name, sep = "\t")
+
+```
+
+Add genes to counts dataframe
+
+```{r dcas9 expression}
+library(dplyr)
+library(ggplot2)
+library(DESeq2)
+library(vsn)
+library("pheatmap")
+library("RColorBrewer")
+library(PCAtools)
+
+cond.df <- readRDS(here("R_data/conditions_df.RData"))
+#load in counts info (manually changed rowname to "dcas9" on counts file)
+plasmid_counts <- as.matrix(read.delim(here("counts/prh2502_Counts.csv"),  sep="\t"))
+colnames(plasmid_counts) <- seq(1,12)
+dim(plasmid_counts)
+mtb_counts <- 
+as.matrix(read.delim(here("counts/all_features_150424_Counts.csv")), sep="\t")
+colnames(mtb_counts) <- seq(1,12)
+dim(mtb_counts)
+counts <- rbind(plasmid_counts, mtb_counts)
+dim(counts)
+
+saveRDS(counts, here("R_data/complete_counts.RData"))
+
+#use protein coding genes only for PCA
+pc_counts <- counts[grepl("gene:", rownames(counts)),]
+
+dds <-DESeqDataSetFromMatrix(countData = round(pc_counts),
+                                   colData = cond.df,
+                                   design = ~ 1)
+
+#data transformation                              
+vsd <- vst(dds, blind=TRUE)
+
+#assay retrieves matrix of normalised values
+head(assay(vsd), 3)
+
+#plot standard deviation to see if consistent across all changes (they are with both methods)
+meanSdPlot(assay(vsd))
+
+#heatmap of sample-to-sample distances
+sampleDists <- dist(t(assay(vsd)))
+sampleDistMatrix <- as.matrix(sampleDists)
+rownames(sampleDistMatrix) <- paste(vsd$treatment, vsd$plasmid, sep="-")
+colnames(sampleDistMatrix) <- vsd$experiment
+colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+png(here("images/sample_heatmap.png"))
+pheatmap(sampleDistMatrix,
+         clustering_distance_rows=sampleDists,
+         clustering_distance_cols=sampleDists,
+         col=colors)
+dev.off()
+
+#pca biplot
+plotPCA(vsd, intgroup=c("treatment", "experiment"))
+
+pcaData <- plotPCA(vsd, intgroup=c("treatment", "plasmid", "experiment"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=plasmid, shape=treatment, label=experiment )) +
+  geom_point(size=3) +
+  geom_text(vjust=-1) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+
+#more pca with transformed counts of protein coding genes
+
+# make all numeric or factors to try to label biplots
+cond_new <- cond.df
+cond_new$sample <- as.numeric(as.character(cond.df$sample))
+cond_new$treatment <- factor(as.character(cond.df$treatment, levels= c("induced", "non")))
+cond_new$plasmid <- factor(as.character(cond.df$plasmid), levels=c("sgrna", "empty"))
+cond_new$plasmid <- factor(as.character(cond.df$plasmid))
+
+#make with all numeric factors (can't use factors fo eigenplot)
+cond_eigen <- cond.df
+cond_eigen$sample <- as.numeric(as.character(cond.df$sample))
+cond_eigen$experiment <- as.numeric(cond.df$experiment)
+cond_eigen$treatment <- as.numeric(cond.df$treatment)
+cond_eigen$plasmid <- as.numeric(cond.df$plasmid)
+
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond_new)
+#p <- pca(assay(vsd), metadata=cond_new)
+summary(p)
+
+#Plot the proportion of variance of each component
+png(here("images/screeplot.png"))
+screeplot(p, axisLabSize = 18, titleLabSize = 22)
+dev.off()
+
+#biplots
+biplot(p)
+biplot(p, showLoadings = TRUE,
+    labSize = 2, pointSize = 3, sizeLoadingsNames = 3)
+#why doesn't this show same % variation for PCs as plotPCA thru deseq (removeVariance doesn't make a difference)
+
+percentVar <- round( p$variance)
+#convert pca data to dataframe
+p_data <- tibble(p$rotated, experiment=p$metadata$experiment, plasmid = p$metadata$plasmid, treatment = p$metadata$treatment, name=p$metadata$sample)
+ggplot(p_data, aes(PC1, PC2, color=plasmid, shape=treatment, label=experiment )) +
+  geom_point(size=3) +
+  geom_text(vjust=-1) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  coord_fixed()
+ggsave(here("images/vsd_pca_pconly.png"))
+
+#pairsplot
+png(here("images/pairs_plot.png"))
+pairsplot(p)
+dev.off()
+pairsplot(p, components = getComponents(p, c(2,3,5,6,8,12)), triangle = FALSE)
+
+#plotloadings show top hits
+png(here("images/plotloadings_1to5.png"))
+plotloadings(p, labSize = 3)
+dev.off
+
+#eigencore plot (looks the same with non-coding)
+p <- pca(assay(vsd), removeVar = 0.1, metadata = cond_eigen)
+
+pl_ec <- eigencorplot(p, getComponents(p, 1:12),
+    metavars = c('experiment','plasmid','treatment'))
+png(filename = here("images/eigencorePlot.png"), width = 1080)
+pl_ec
+dev.off()
+
+#plotloadings show top hits in specific PCs
+pl <- plotloadings(p, getComponents(p, c(1:9)), labSize = 3, ylim = c(-0.1,0.1))
+# retains 20 variables incl Rv0758, Rv0073 and Rv0074
+png(here("images/plotloadings.png"), width = 1080)
+pl
+dev.off()
+```
+dcas9 genes reduce effect of pc1 clustering by experiment and more obvious clustering by treatment in PC2.
+
+dcas9 log fold change of 4.8 in treated/untreated empty vector control and 4.9 in sgrna-containing.

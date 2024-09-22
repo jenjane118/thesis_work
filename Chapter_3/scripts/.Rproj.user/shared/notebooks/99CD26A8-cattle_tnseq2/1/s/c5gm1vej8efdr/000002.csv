@@ -1,0 +1,17 @@
+"0","```r
+orig_df <- read_delim(here(\"Output\", \"gene_insertion_summary.txt\"), delim=\"\t\")
+nrow(orig_df)
+
+# select only total_reads and TAs_hit from orig_df
+test <- full_join(orig_df, sample_ins_genes, by= c(\"filename\", \"genes_insertions\"), keep=F)
+View(test)
+# get rid of original percentage columns
+test <- test %>% select(-c(perc_NE.x, perc_total.x))
+test <- test %>% rename(perc_NE = perc_NE.y) %>% rename(perc_total = perc_total.y)
+insertion_summary <- test
+## input library has 3319 genes with insertions (non-zero sum of reads) which is more than the number of NE genes (3092). Obviously, genes with insertions can include GA, GD and even ES genes, so the percentage of NE genes with insertions will be > 100%
+
+# write header
+write_lines(\"#Genes with insertions have non-zero normalised sum of reads\", file=here(\"Output\", \"gene_insertion_summary.txt\"))
+write_tsv(insertion_summary, file=here(\"Output\", \"gene_insertion_summary.txt\"))
+```"

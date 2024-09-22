@@ -1,0 +1,3 @@
+"0","```bash
+convert gff_to_prot_table <.gff> <.prot_table>
+```"

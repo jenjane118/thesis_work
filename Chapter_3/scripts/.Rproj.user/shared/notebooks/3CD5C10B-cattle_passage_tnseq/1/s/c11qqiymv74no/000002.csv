@@ -1,0 +1,11 @@
+"0","```bash
+```r
+rs9<-read.csv(\lung_tnseq/tpp_genewiz2/resampling_tests/resamp_test_betageom_MbA02.txt\, comment.char = \#\, sep=\\t\, header=F)
+colnames(rs9) <- c(\Orf\,	\Name\,	\Desc\,	\Sites\, \Mean_Ctrl\,	\Mean_Exp\, 	\log2FC\,	\Sum_Ctrl\,	\Sum_Exp\,	\Delta_Mean\,	\pvalue\,	\Adj_pvalue\)
+
+resamp_param.df[9,1] <- nrow(rs9[rs9$log2FC>2,])
+resamp_param.df[9,2] <- nrow(rs9[rs9$Adj_pvalue<0.05,])
+rownames(resamp_param.df)[9]<-c(\betageom\)
+resamp_param.df
+```
+```"

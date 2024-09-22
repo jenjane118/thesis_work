@@ -1,0 +1,15 @@
+"0","```bash
+scp Mbovis_site_filter.prot_table sj003@ssh.cryst.bbk.ac.uk:/d/in16/u/sj003/
+scp Mbovis_resamp_07_10.prot_table sj003@ssh.cryst.bbk.ac.uk:/d/in16/u/sj003/
+# moved to refseqs folder in thoth directory
+mv Mbovis_site_filter.prot_table refseqs/mbovis/
+
+# transit not in py36 env, install with conda
+# need to edit resampling.py in thoth
+cd /d/in16/u/sj003/anaconda3/envs/py36/lib/python3.6/site-packages/pytransit/analysis
+
+# run with script
+cd $my_path/final_sample_wigs
+bash $my_path/scripts/iterate_resampling.sh final_samples.txt
+
+```"

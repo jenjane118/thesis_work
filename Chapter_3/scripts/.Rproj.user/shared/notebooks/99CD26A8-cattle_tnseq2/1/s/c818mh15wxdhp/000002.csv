@@ -1,0 +1,37 @@
+"0","```r
+
+#look at ta sites in all samples for specific genes?
+
+glpd2_bound <- c(3646620, 3648377)
+aspc_bound <- c(402903, 404192)
+
+lib1 <- read_delim(here(\"lung_tnseq/data/final_sample_wigs/perm_lung_tpp_MbA27.wig\"), skip=1)
+head(lib1)
+file_list <- list.files(here(\"lung_tnseq/data/final_sample_wigs/\"))
+
+ins_glpd2 <- lib1[lib1$variableStep >= glpd2_bound[1] & lib1$variableStep <= glpd2_bound[2],1]
+ins_aspc <- lib1[lib1$variableStep >= aspc_bound[1] & lib$variableStep <= aspc_bound[2],1]
+
+for (i in 1:length(file_list)){
+  filename  <- file_list[i]
+  lib <- read_delim(here(paste(\"lung_tnseq/data/final_sample_wigs/\", filename, sep=\"\")), skip=1, show_col_types = F)
+  for (j in 1:nrow(ins_glpd2)){
+    ins_glpd2[j, i+1] <- lib[which(lib$variableStep==ins_glpd2$variableStep[j]),2]
+  }
+  for (j in 1:nrow(ins_aspc)){
+    ins_aspc[j, i+1] <- lib[which(lib$variableStep==ins_aspc$variableStep[j]),2]
+  }
+}
+new_fn <- sub(\"perm_lung_tpp_\", \"\", file_list)
+colnames(ins_glpd2) <- c(\"TA_site\", sub(\".wig\", \"\", new_fn))
+colnames(ins_aspc)  <- c(\"TA_site\", sub(\".wig\", \"\", new_fn))
+
+
+
+
+
+#write_csv(ins_glpd2, here(\"lung_tnseq/Output/ins_glpd2.csv\"))
+#write_csv(ins_aspc, here(\"lung_tnseq/Output/ins_aspc.csv\"))
+
+
+```"

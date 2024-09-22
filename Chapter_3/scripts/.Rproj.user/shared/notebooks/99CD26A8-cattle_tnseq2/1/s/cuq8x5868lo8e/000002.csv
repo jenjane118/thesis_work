@@ -1,0 +1,5 @@
+"0","```r
+
+save(data_ortho, file=\"~/git/Mbovis_in-vivo_Tnseq/resamp_data.RData\")
+
+```"

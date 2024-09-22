@@ -1,0 +1,137 @@
+#HTTP/1.1 200 OK
+#Date: Wed, 16 Aug 2023 14:32:07 GMT
+#Server: Apache
+#Content-Type: text/plain; charset=utf-8
+#Transfer-Encoding: chunked
+mbo01100	Metabolic pathways - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01110	Biosynthesis of secondary metabolites - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01120	Microbial metabolism in diverse environments - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01200	Carbon metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01210	2-Oxocarboxylic acid metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01212	Fatty acid metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01230	Biosynthesis of amino acids - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01232	Nucleotide metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01250	Biosynthesis of nucleotide sugars - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01240	Biosynthesis of cofactors - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01220	Degradation of aromatic compounds - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00010	Glycolysis / Gluconeogenesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00020	Citrate cycle (TCA cycle) - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00030	Pentose phosphate pathway - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00040	Pentose and glucuronate interconversions - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00051	Fructose and mannose metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00052	Galactose metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00053	Ascorbate and aldarate metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00500	Starch and sucrose metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00520	Amino sugar and nucleotide sugar metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00620	Pyruvate metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00630	Glyoxylate and dicarboxylate metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00640	Propanoate metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00650	Butanoate metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00660	C5-Branched dibasic acid metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00562	Inositol phosphate metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00190	Oxidative phosphorylation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00680	Methane metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00910	Nitrogen metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00920	Sulfur metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00061	Fatty acid biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00071	Fatty acid degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00100	Steroid biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00121	Secondary bile acid biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00561	Glycerolipid metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00564	Glycerophospholipid metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00565	Ether lipid metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00600	Sphingolipid metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00592	alpha-Linolenic acid metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01040	Biosynthesis of unsaturated fatty acids - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00230	Purine metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00240	Pyrimidine metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00250	Alanine, aspartate and glutamate metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00260	Glycine, serine and threonine metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00270	Cysteine and methionine metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00280	Valine, leucine and isoleucine degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00290	Valine, leucine and isoleucine biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00300	Lysine biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00310	Lysine degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00220	Arginine biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00330	Arginine and proline metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00340	Histidine metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00350	Tyrosine metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00360	Phenylalanine metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00380	Tryptophan metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00400	Phenylalanine, tyrosine and tryptophan biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00410	beta-Alanine metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00430	Taurine and hypotaurine metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00450	Selenocompound metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00460	Cyanoamino acid metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00470	D-Amino acid metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00480	Glutathione metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00515	Mannose type O-glycan biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00514	Other types of O-glycan biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00540	Lipopolysaccharide biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00542	O-Antigen repeat unit biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00541	O-Antigen nucleotide sugar biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00550	Peptidoglycan biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00552	Teichoic acid biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00571	Lipoarabinomannan (LAM) biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00572	Arabinogalactan biosynthesis - Mycobacterium - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00543	Exopolysaccharide biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00730	Thiamine metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00740	Riboflavin metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00750	Vitamin B6 metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00760	Nicotinate and nicotinamide metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00770	Pantothenate and CoA biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00780	Biotin metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00785	Lipoic acid metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00790	Folate biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00670	One carbon pool by folate - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00860	Porphyrin metabolism - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00130	Ubiquinone and other terpenoid-quinone biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00900	Terpenoid backbone biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00906	Carotenoid biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00903	Limonene degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00907	Pinene, camphor and geraniol degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00523	Polyketide sugar unit biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01053	Biosynthesis of siderophore group nonribosomal peptides - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00946	Degradation of flavonoids - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00311	Penicillin and cephalosporin biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00332	Carbapenem biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00261	Monobactam biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00521	Streptomycin biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00525	Acarbose and validamycin biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00401	Novobiocin biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00999	Biosynthesis of various plant secondary metabolites - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00362	Benzoate degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00627	Aminobenzoate degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00364	Fluorobenzoate degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00625	Chloroalkane and chloroalkene degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00361	Chlorocyclohexane and chlorobenzene degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00623	Toluene degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00622	Xylene degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00643	Styrene degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00930	Caprolactam degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00621	Dioxin degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00626	Naphthalene degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00984	Steroid degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00983	Drug metabolism - other enzymes - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03020	RNA polymerase - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03010	Ribosome - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo00970	Aminoacyl-tRNA biosynthesis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03060	Protein export - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo04122	Sulfur relay system - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03050	Proteasome - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03018	RNA degradation - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03030	DNA replication - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03410	Base excision repair - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03420	Nucleotide excision repair - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03430	Mismatch repair - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03440	Homologous recombination - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03450	Non-homologous end-joining - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03250	Viral life cycle - HIV-1 - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo02010	ABC transporters - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo03070	Bacterial secretion system - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo02020	Two-component system - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo02024	Quorum sensing - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo05152	Tuberculosis - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01501	beta-Lactam resistance - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01502	Vancomycin resistance - Mycobacterium tuberculosis variant bovis AF2122/97
+mbo01503	Cationic antimicrobial peptide (CAMP) resistance - Mycobacterium tuberculosis variant bovis AF2122/97

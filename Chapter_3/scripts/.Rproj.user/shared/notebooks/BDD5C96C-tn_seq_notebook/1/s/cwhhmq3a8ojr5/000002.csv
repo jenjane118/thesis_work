@@ -1,0 +1,3 @@
+"0","```bash
+python3 src/transit.py export combined_wig <comma-separated .wig files> <annotation .prot_table> <output file>
+```"

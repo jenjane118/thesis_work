@@ -1,0 +1,3 @@
+"0","```bash
+transit normalize infile.wig outfile_TTR.wig -n TTR
+```"

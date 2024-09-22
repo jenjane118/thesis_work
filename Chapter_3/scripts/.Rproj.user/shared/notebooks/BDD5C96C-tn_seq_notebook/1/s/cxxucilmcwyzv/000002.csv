@@ -1,0 +1,20 @@
+"0","```bash
+#!/bin/bash
+
+FILES=*_tpp.*
+
+for file in $FILES
+
+do
+	filename=${file:0:1} 
+	extension=\"${file##*.}\"
+
+	echo \"${file}\"
+	echo \"${filename}\"
+	echo \"${extension}\"
+
+	mv ${file} ${filename}_R1.$extension	
+
+
+done
+```"

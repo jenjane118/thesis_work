@@ -1,0 +1,144 @@
+## try http:// if https:// URLs are not supported
+#source("https://bioconductor.org/biocLite.R")
+##biocLite("rtracklayer") *this is deprecated use biocmanager instead
+
+#BiocManager::install("rtracklayer")
+
+# for help docs
+browseVignettes("rtracklayer")
+
+library("rtracklayer")
+library(GenomicRanges)
+
+bovisTrack <- import("LT708304_updated_aug19.gff")
+
+genome(bovisTrack)
+#LT708304.1 
+#       NA 
+
+head(seqnames(bovisTrack))
+head(start(bovisTrack))
+head(strand(bovisTrack))
+head(width(bovisTrack))
+
+# look at first 20 targets
+first20 <- bovisTrack[1:20]
+# this give org of data and if you click on far right in viewer, gives commands
+# for retrieving this column
+View(first20)
+
+first20@ranges@start
+#end
+first20@ranges@width
+first20@strand
+# this has gene function, gene name, aa len and ORF id
+first20[6]@elementMetadata@listData[["note"]]
+first20@elementMetadata@listData[["product"]]
+first20@elementMetadata@listData[["gene"]]
+
+bovisTrack@elementMetadata@listData[["product"]]
+
+# do we need to limit to type 'CDS' ? no description for type 'gene' and same coordinates?
+first20@elementMetadata@listData[["type"]]
+
+# use only relevant columns in dataframe (keep locus tag b/c 'gene' features don't have note)
+bovis_df<-data.frame(descr = elementMetadata(bovisTrack)[,c("gene", "type", "note", "product", "locus_tag")], 
+           start = start(bovisTrack), end = end(bovisTrack), strand = as.factor(strand(bovisTrack)))
+View(bovis_df)
+
+# if we want only CDS features:
+cds<-bovis_df[bovis_df$descr.type == 'CDS',]
+View(cds)
+
+# parse mbovis_df and put in new dataframe "prot_table"
+
+prot_table<-data.frame(matrix(NA,ncol=9,nrow=nrow(bovis_df)), stringsAsFactors = FALSE)
+
+colnames(prot_table)<-c("PRODUCT","START", "END", "STRAND", "AA_LEN", "TYPE", "GAP", "NAME", "ORF_ID")
+
+for (i in 1:nrow(bovis_df)){
+#for (i in 1949:1950){
+  # product, gene name, ORF id and aa len must be parsed from column 9 ()
+  orf<-''
+  gene_name<-''
+  aa_len<-''
+  if (is.na(bovis_df$descr.note[i])){
+    note<-''
+  }
+  # if tRNA
+  else if (bovis_df$descr.type[i]=="tRNA"){
+    note<-unlist(strsplit(bovis_df[i,3],split = ","))
+    orf<-note[1]
+    gene_name <- note[1]
+    #aa_len <- substr(note[3], 6, nchar(note[3]))
+  }
+  # if repeat region
+  else if (bovis_df$descr.type[i]=="repeat_region"){
+    note<-unlist(strsplit(bovis_df[i,3],split = ","))
+    orf<-note[1]
+    gene_name <- note[4]
+  }
+  else {
+    note<-unlist(strsplit(bovis_df[i,3],split = ","))
+    orf<-note[1]
+    gene_name<- note[2]
+    len<- substr(note[4], 7, nchar(note[4]))
+    # get only integers from len string:
+    x<- gregexpr("[0-9]+", len)
+    aa_len <- as.numeric(unlist(regmatches(len, x)))
+    #aa_len<- data[grep("[0-9]+", len),]
+    }
+  # product 
+  if (!is.na(bovis_df$descr.product)[i]){
+    prot_table$PRODUCT[i]<-bovis_df[i,4]
+  }
+  # start and end
+  # make sure start and end in right order (could be switched?)
+  if (bovis_df[i,7]<bovis_df[i,6]){
+    prot_table$START[i]<-bovis_df[i,7]
+    prot_table$END[i]<-bovis_df[i,6]
+  } else {
+    prot_table$START[i]<-bovis_df[i,6]
+    prot_table$END[i]<-bovis_df[i,7]
+  }
+  
+  # strand
+  prot_table$STRAND[i]<-as.character(bovis_df$strand[i])
+
+  # type
+  if (!is.na(bovis_df$descr.type)[i]){
+    prot_table$TYPE[i]<-as.character(bovis_df$descr.type[i])
+  }
+  # GAP
+  prot_table$GAP[i]<-"-"
+  
+  # enter cells in dataframe if note is present:
+  if (length(note)>0){
+    # if type = Repeat, no aa len (nt length), in these is inputing '37' for aa_len (from H37Rv?)
+    # aa_length
+    if (length(aa_len)>0){
+      prot_table$AA_LEN[i]<-aa_len
+    }
+    # gene name
+    if (length(gene_name)>0){
+      prot_table$NAME[i]<-gene_name
+    }
+    # orf
+    if (length(orf)>0){
+      prot_table$ORF_ID[i]<-orf
+    }
+  }
+  # gene name if no note:
+  else if (length(bovis_df$descr.gene[i])>0){
+    prot_table$NAME[i]<-bovis_df$descr.gene[i]
+  }
+  # ORF id if no note (from locus-id)
+  else {
+    prot_table$ORF_ID[i]<-substr(bovis_df$descr.locus_tag[i],8, nchar(bovis_df$descr.locus_tag[i]))
+  }
+}
+View(prot_table)
+
+write.table(prot_table,"mbovis.prot_table",sep="\t", col.names = F, row.names = F, quote = F)
+
+# this includes the wrong coordinates for 'gene' entries. need to re-do without gene entries.

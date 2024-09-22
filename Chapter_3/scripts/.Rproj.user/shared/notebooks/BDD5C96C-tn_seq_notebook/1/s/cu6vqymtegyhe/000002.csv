@@ -1,0 +1,6 @@
+"0","```bash
+module load python/v3
+module load fastqc
+fastqc B_S1_L001_R2_001.fastq 
+firefox B_S1_L001_R2_001_fastqc.html
+```"

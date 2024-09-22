@@ -1,0 +1,9 @@
+"0","data_ortho <- readRDS(here(""resamp_data.RData""))
+"
+"2","Warning in gzfile(file, ""rb"") :"
+"2","
+ "
+"2"," cannot open compressed file '/Users/jenniferstiens/tn_seq/scripts/resamp_data.RData', probable reason 'No such file or directory'
+"
+"2","Error in gzfile(file, ""rb"") : cannot open the connection
+"

@@ -1,0 +1,32 @@
+"0","```bash
+# make sure use transit in tnseq env for revisions
+conda activate tnseq
+cd ~/git/tn_seq/lung_tnseq/final_sample_wigs
+# with no change genes removed
+transit resampling perm_lung_tpp_MbA27.wig perm_lung_tpp_MbA17.wig ~/git/tn_seq/Mbovis_resamp_07_10.prot_table ~/git/tn_seq/lung_tnseq/resamp_07_10/resamp_nochange_MbA17.txt
+# with no change and small genes removed
+transit resampling perm_lung_tpp_MbA27.wig perm_lung_tpp_MbA17.wig ~/git/tn_seq/Mbovis_site_filter.prot_table ~/git/tn_seq/lung_tnseq/resamp_07_10/resamp_small_MbA17B.txt
+
+# to iterate through list
+cd ~/git/tn_seq/lung_tnseq/final_sample_wigs
+
+bash ~/git/tn_seq/scripts/iterate_resampling.sh ~/git/tn_seq/lung_tnseq/final_samples.txt
+
+#!/bin/bash
+input=$1
+while IFS= read -r line
+
+do
+	filename=$(basename \"$line\")
+	extension=\"${filename##*.}\"
+	filename=\"${filename%.*}\"
+
+	echo \"file on the loop:		$line\"
+
+	transit resampling perm_lung_tpp_MbA27.wig ${line} ~/git/tn_seq/Mbovis_resamp_07_10.prot_table ~/git/tn_seq/lung_tnseq/resamp_07_10/rs_nochange_${filename}.txt
+
+	echo \"output:                    resamp_${filename}.txt\"
+
+done <\"$input\"
+
+```"

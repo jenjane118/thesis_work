@@ -1,0 +1,4 @@
+"0","```bash
+transit resampling bovis_hiseq/tpp/bovis_hiseq_tpp_19.wig,bovis_hiseq/tpp/bovis_hiseq_tpp_20.wig,bovis_hiseq/tpp/bovis_hiseq_tpp_21.wig mtb_hiseq/TPP/mtb22_hiseq_tpp.wig,mtb_hiseq/TPP/mtb23_hiseq_tpp.wig bovis_best.prot_table,tb_on_bovis.prot_table rev_resampling_output.txt
+
+```"

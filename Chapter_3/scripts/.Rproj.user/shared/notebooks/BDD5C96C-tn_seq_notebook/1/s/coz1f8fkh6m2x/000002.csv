@@ -1,0 +1,3 @@
+"0","```bash
+curl \"https://www.ebi.ac.uk/ena/data/view/LT708304&display=txt&expanded=true\" > LT708304.embl
+```"

@@ -1,0 +1,7 @@
+"0","```bash
+```bash
+head -50 <file.fastq> | 
+```
+```"
+"1","cannot open file 'lung_tnseq/data/tpp_genewiz2/transit_18_08_21/hmm_MbA027_loess_genes.txt': No such file or directoryError in file(file, \"rt\") : cannot open the connection
+"

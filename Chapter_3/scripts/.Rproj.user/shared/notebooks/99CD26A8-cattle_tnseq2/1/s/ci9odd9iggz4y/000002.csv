@@ -1,0 +1,49 @@
+"0","```r
+
+cor_all <- read_delim(here(\"lung_tnseq/Output/lung_node_cor_all.txt\"), skip=6, col_names = T)
+cor_all %>% dplyr::filter(`Adj. p-value` < 0.05)
+
+#3 genes with significant log2fc differences in two sets (pval>0.05)
+#MB2925, MB2958, MB2965c, all negative l2fc (more insertions in lung than node--'attenuated in node but not lung')
+
+#pair9540
+cor_9540 <- read_delim(here(\"lung_tnseq/Output/lung_node_cor_9540.txt\"), skip=6, col_names = T)
+cor_9540 %>% dplyr::filter(`Adj. p-value` < 0.05)
+#two genes: MB2958 (-11.24), MB2965c (-8,87) (same as in all together)
+# sample 22 had significant skew, run again with betageom
+
+cor_9540 <- read_delim(here(\"lung_tnseq/Output/lung_node_cor_9540bg.txt\"), skip=6, col_names = T)
+cor_9540 %>% dplyr::filter(`Adj. p-value` < 0.05)
+
+#only MB2965c still had signif differences
+
+#pair9544
+cor_9544 <- read_delim(here(\"lung_tnseq/Output/lung_node_cor_9544.txt\"), skip=6, col_names = T)
+cor_9544 %>% dplyr::filter(`Adj. p-value` < 0.05)
+# no signif differences 
+#both 9 and 24 had skew, need to re-run with betageom?
+
+#pair9534
+cor_9534 <- read_delim(here(\"lung_tnseq/Output/lung_node_cor_9534.txt\"), skip=6, col_names = T)
+cor_9534 %>% dplyr::filter(`Adj. p-value` < 0.05)
+# no sig differences
+
+#pair9542
+cor_9542 <- read_delim(here(\"lung_tnseq/Output/lung_node_cor_9542.txt\"), skip=6, col_names = T)
+cor_9542 %>% dplyr::filter(`Adj. p-value` < 0.05)
+# no sig differences
+
+#pair9547
+cor_9547 <- read_delim(here(\"lung_tnseq/Output/lung_node_cor_9547.txt\"), skip=6, col_names = T)
+cor_9547 %>% dplyr::filter(`Adj. p-value` < 0.05)
+# no signif differences
+
+#pair9554
+cor_9554 <- read_delim(here(\"lung_tnseq/Output/lung_node_cor_9554.txt\"), skip=6, col_names = T)
+cor_9554 %>% dplyr::filter(`Adj. p-value` < 0.05)
+# no significant differences
+
+cor_all_lung <-read_delim(here(\"lung_tnseq/Output/lung_node_cor_all_lung.txt\"), skip=6, col_names = T)
+cor_all_lung %>% dplyr::filter(`Adj. p-value` < 0.05)
+#0
+```"

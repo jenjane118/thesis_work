@@ -1,0 +1,45 @@
+"0","```r
+```r
+pdim_20 <- good_data %>%
+  filter(Orf %in% pdim_genes[1:20]) %>%
+  filter(Sites >5 ) %>%
+  filter(innoc_call !=\ES\) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  mutate(group = \pdim_20\)
+nrow(pdim_20 %>% group_by(Orf) %>% distinct(Orf))
+#19
+
+#join with other pdim genes
+
+pdim <- full_join(pdim_all, pdim_20)
+pdim$group <- as.factor(pdim$group)
+
+
+ggplot(data=pdim, group=group) +
+        geom_violin(aes(x = group, y = log2FC, fill = group),
+                    trim=F, draw_quantiles = 0.5) +
+        geom_segment( aes(
+              x    = match(group, levels(group)) - 0.1,
+			        xend = match(group, levels(group)) + 0.1,
+		          y    = mean_lfc,
+			        yend = mean_lfc ),
+		          col='white') +
+        scale_fill_manual(values=c(\#0000FF\, \#00FF00\)) +
+        ggtitle(label = \Comparing first 20 pdim genes with whole group\, subtitle = \white = mean LFC for Orf; black = median LFC for group\) +
+        theme(panel.background = element_rect(
+                  fill = \grey50\, 
+                  colour = \grey50\),
+              panel.grid.major = element_blank(), 
+              panel.grid.minor = element_blank(),
+              axis.text.x = element_text(
+                        angle = 90, 
+                        vjust = 0.5, 
+                        hjust=1,
+                        size=10, 
+                        face = \bold.italic\),
+              plot.title = element_text(hjust = 0.5), 
+              legend.key.size = unit(10, \point\) ) 
+
+```
+```"

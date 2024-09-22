@@ -1,0 +1,19 @@
+"0","```r
+# sum up results file for Transit hmm for new tb hiseq set
+
+hmm_results<-read.delim(\"~/Data/htm_hiseq/mtb_hiseq_combined_genes.wig\", 
+                        sep=\"\t\", header=FALSE, stringsAsFactors=F, 
+                        comment.char = '#')
+head(hmm_results)
+
+
+# change to just gene and call--will affect downstream plots
+mtb_hmm <- select(hmm_results, 2, 1, 11)
+colnames(mtb_hmm) <- c(\"gene\",\"ORF\", \"call\")
+
+nrow(mtb_hmm)
+View(mtb_hmm)
+
+#write to .csv for sharon
+write.csv(mtb_hmm, \"hiseq_mtb_transit.csv\", quote=F)
+```"

@@ -1,0 +1,4 @@
+"0","```bash
+awk -F '\t' '$4 == 61' hmm_MbA027_loess_genes.txt
+
+```"

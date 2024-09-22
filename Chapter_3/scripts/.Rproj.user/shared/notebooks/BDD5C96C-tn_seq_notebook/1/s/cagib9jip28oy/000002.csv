@@ -1,0 +1,10 @@
+"0","```r
+devtools::install_github(\"gaospecial/ggVennDiagram\")
+library(\"ggVennDiagram\")
+a<-dj_lfc_signif$Orf
+b<-tb_signif
+c<-c(dj39_lfc_signif$Orf)
+x<-list(dj_67=a, hiseq_tb=b, dj_43=c)
+ggVennDiagram(x) + scale_fill_gradient(low=\"orange\",high = \"red\")
+
+```"

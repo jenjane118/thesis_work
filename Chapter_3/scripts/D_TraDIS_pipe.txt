@@ -1,0 +1,56 @@
+#### TraDIS Pipeline
+
+Programs needed:
+
+Samtools
+bwa
+bio-tradis
+bamtools
+trimmomatic (if required to trim)
+
+** also need bedtools
+
+
+Need 4 files in addition to FASTQs:
+
+Reference fasta file
+Tradis_pipeline_make_BAMs.sh
+TraDIS_summary.R
+names.txt (text file with names of FASTQs in rows (without .fastq.gz))
+
+## Index reference fasta
+
+bwa index ref.fasta
+
+## Run shell script to remove tags and create aligned BAMs (need to specify tag sequence and reference file name
+
+tag=GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTA ref=M.bovis_AF2122.fasta ./Tradis_pipeline_make_BAMs.sh
+
+## move into BAM folder and run R script
+
+cd ..._BAMs (... will be date and time)
+
+Rscript ../TraDIS_summary_Mbovis.R
+
+## to calculate essentialities
+
+TraDIS_summary_Mbovis-LT708304.1_gammaFit.R
+
+####################################################################
+
+I changed some parts of script—- using bwa mem instead of aln to see what mapping results are
+
+added ref and tag variable to script
+
+nohup bash $my_path/my_scripts/tradis_pipeline_make_BAMS.sh ./ >& run_tradis_out &
+
+have to load bedtools, samtools, bwa and python
+
+for multiqc, must generate samtools stats on .bam files (or .sam files in tpp) before running multiqc
+>$my_path/my_scripts/iterate_samstats.sh
+
+use bam files and run ‘tradis_plot’ to get insertion site plot (is this the same as dong’s ‘tradis summary’?
+
+>tradis_plot -f $my_path/mbovis/bwa_mapped/2020_06_03_mem_BAMs/B_S1_L001_R1_001.sort.bam -o B_S1_tradis.plot
+
+ 

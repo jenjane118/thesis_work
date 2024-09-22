@@ -1,0 +1,126 @@
+"0","```r
+library(tidyverse)
+library(here)
+# read in data
+load(\"~/git/Mbovis_in-vivo_Tnseq/resamp_data.RData\")
+
+# read in gene list
+myco_genes <- scan(here(\"lung_tnseq/data/gene_lists/mycobactin_mendum.txt\"), what=\"\", sep=\"\n\")
+pdim_genes <- scan(here(\"lung_tnseq/data/gene_lists/pdim_mendum.txt\"), what=\"\", sep=\"\n\")
+carb_genes <- scan(here(\"lung_tnseq/data/gene_lists/carb_trans_mendum.txt\"), what = \"\", sep=\"\n\")
+chol_kstr2_genes <- scan(here(\"lung_tnseq/data/gene_lists/chol_kstr2_mendum.txt\"), what = \"\", sep=\"\n\")
+mce_genes <- scan(here(\"lung_tnseq/data/gene_lists/mce4_operon.txt\"), what = \"\", sep=\"\n\")
+chol_ring_genes <- scan(here(\"lung_tnseq/data/gene_lists/chol_ring_cat_mendum.txt\"), what = \"\", sep=\"\n\")
+#red_sulfate_genes <- scan(here(\"lung_tnseq/data/gene_lists/red_sulfate_mendum.txt\"), what = \"\", sep=\"\n\")
+
+
+data_node <- data_ortho %>%
+  filter(TAs > 5) %>%
+  filter(call !=\"ES\") %>%
+  filter(tissue == \"Node\") %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC))
+  
+red_sulfate_node <- data_ortho %>%
+  dplyr::filter(TAs > 5) %>%
+  dplyr::filter(call !=\"ES\") %>%
+  dplyr::filter(tissue == \"Node\") %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  group_by(Orf) %>%
+  mutate(mean_lfc = mean(log2FC)) %>%
+  dplyr::filter(Orf %in% red_sulfate_genes) %>%
+  mutate(group = \"reductive sulfate\")
+# only 4 genes represented in nodes?
+
+myco_node <-  data_node %>%
+  filter(Orf %in% myco_genes) %>%
+  mutate(group = \"mycobactin synth\")
+ 
+pdim_node <- data_node %>%
+  filter(Orf %in% pdim_genes) %>%
+  mutate(group = \"pdim synth\")
+
+carb_n <- data_node %>%
+  filter(Orf %in% carb_genes) %>%
+  mutate(group = \"carb transport\")
+  
+chol_kstr2_n <- data_node %>%
+  filter(Orf %in% chol_kstr2_genes) %>%
+  mutate(group = \"kstr2 regulon\")
+  
+mce_n <- data_node %>%
+  filter(Orf %in% mce_genes) %>%
+  mutate(group = \"chol import/mce4\")
+
+chol_ring_n <- data_node %>%
+  filter(Orf %in% chol_ring_genes) %>%
+  mutate(group = \"chol ring catab\")
+
+base_nodes <- data_ortho %>%
+  filter(TAs >5 ) %>%
+  mutate(group = \"background\") %>%
+  filter(call !=\"ES\") %>%
+  filter(tissue == \"Node\") %>%
+  group_by(filename) %>%
+  mutate(sample_median = median(log2FC)) %>%
+  ungroup() %>%
+  mutate(norm_lfc = log2FC-sample_median) %>%
+  ungroup() %>%
+  mutate(mean_lfc = NA) #set as NA so segments won't show
+  
+nrow(base_nodes %>% distinct(Orf))
+
+median(base_nodes$log2FC)
+#-0.42
+median(base_nodes$norm_lfc)
+#0
+
+data_node <- NULL
+data_node <- full_join(myco_node, pdim_node)
+data_node <- full_join(data_node, carb_n)
+data_node <- full_join(data_node, chol_kstr2_n)
+data_node <- full_join(data_node, mce_n)
+data_node <- full_join(data_node, chol_ring_n)
+data_node <- full_join(data_node, base_nodes)
+data_node <- full_join(data_node, red_sulfate_node)
+data_node$group <- as.factor(data_node$group)
+
+node <-ggplot(data=data_node, group=group) +
+        geom_violin( aes(x = group, y = norm_lfc, fill = group),
+                     trim=F, draw_quantiles = 0.5) +
+        geom_segment( aes(
+              x    = match(group, levels(group)) - 0.1,
+			        xend = match(group, levels(group)) + 0.1,
+		          y    = mean_lfc,
+			        yend = mean_lfc ),
+		          col='white') +
+        scale_fill_manual(values=c(\"grey50\", \"red3\",
+                          \"#00FF00\",\"dodgerblue3\", \"yellow2\",
+                          \"violetred2\",\"turquoise3\",
+                          \"chocolate4\")) +
+        #scale_fill_brewer(type = \"qual\", palette = \"Spectral\") +
+        ggtitle(label = \"Gene groups: Nodes\", subtitle = \"white = mean LFC for Orf; black = median LFC for group, normalised for median of background logFC\") +
+        theme(panel.background = element_rect(
+                  fill = \"grey75\", 
+                  colour = \"grey75\"),
+              panel.grid.major.x = element_blank(), 
+              panel.grid.minor = element_blank(),
+              axis.text.x = element_text(
+                        angle = 90, 
+                        vjust = 0.5, 
+                        hjust=1,
+                        size=10, 
+                        face = \"bold.italic\"),
+              plot.title = element_text(hjust = 0.5), 
+              legend.position=\"none\" ) 
+node
+#ggsave(here(\"images/gene_group_violins_nodes.png\", width = 9))
+
+```"

@@ -1,0 +1,6 @@
+"0","```r
+for (k in 1:ncol(insertionsite)){
+  insertionsite[1,k]<-length(which(is.element(reads$pos,a[k])))
+  }
+summary_stats$`Av.Coverage`[i]<-median(as.numeric(insertionsite[1,]))
+```"

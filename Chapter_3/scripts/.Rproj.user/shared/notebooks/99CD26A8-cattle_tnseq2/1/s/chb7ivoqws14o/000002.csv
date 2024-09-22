@@ -1,0 +1,7 @@
+"0","```bash
+for i in *.txt
+do 
+    sed -i.bak '7s/.//' \"$i\"
+done
+
+```"

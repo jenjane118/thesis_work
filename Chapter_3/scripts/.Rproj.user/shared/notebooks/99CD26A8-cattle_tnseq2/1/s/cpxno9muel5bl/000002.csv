@@ -1,0 +1,40 @@
+"0","```r
+
+library(tidyverse)
+library(purrr)
+# all in one nested dataframe with file information
+
+data_path <- \"lung_tnseq/resamp_08_10\"
+filenames <- dir(data_path, pattern=\"*.txt\")
+df1 <- data_frame(filename=filenames) %>%
+  mutate(file_contents = map(filenames,          # read files into
+           ~ read_tsv(file.path(data_path, .), skip=6)) # a new data column
+        )  
+colnames(unnest(df1, cols=2))
+
+nrow(df1)
+#26
+
+df1 <- df1 %>%
+  mutate(filename = str_replace(filename, \".txt\", \"\")) %>%
+  mutate(filename = str_replace(filename, \"rs_nochange_perm_lung_tpp\", \"GW2\")) %>%
+  mutate(filename = str_replace(filename, \"rs_nochange_bg_perm_lung_tpp\", \"GW2\")) %>%
+  mutate(filename = str_replace(filename, \"GW2_MbA016\", \"GW1_MbA016\"))
+
+
+# list of nested dfs
+unnest(df1, cols = 1)
+
+# all unnested
+unnest(df1, cols=2)
+
+# get particular sample
+unnest(df1, cols = 2) %>%
+  filter(filename==\"GW2_MbA02\")
+
+# irregular orf names
+unnest(df1, cols = 2) %>%
+  filter(!grepl(\"MB\", Orf)) %>%
+  distinct(Orf, Name)
+  
+```"

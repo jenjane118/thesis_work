@@ -1,0 +1,4 @@
+"0","```bash
+transit tnseq_stats bovis_combined_nonorm.wig -o bovis_combined_nonorm_stats.dat
+transit tnseq_stats bovis_combined_TTR.wig -o bovis_combined_TTR_stats.dat
+```"

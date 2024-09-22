@@ -1,0 +1,3 @@
+"0","```bash
+grep -m 10 -e GTCTAGAGACCGGGGACTTATCAGCCAACCTGTTAAGATCGGAAGAGCAC $my_path/mtb/Mtb1_S4_R1.fastq
+```"

@@ -1,0 +1,3 @@
+"0","```bash
+tpp -bwa /s/software/bwa/bwa/bwa -ref $my_path/refseqs/Mtb/Mtb_H37Rv.fasta -reads1 $my_path/ncbi/files/dejesus/SRR4113427_1.fastq -output dejesus-Mtb-SRR4113427_singleread
+```"

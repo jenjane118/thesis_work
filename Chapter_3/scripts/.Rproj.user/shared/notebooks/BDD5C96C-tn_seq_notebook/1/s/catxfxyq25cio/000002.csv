@@ -1,0 +1,3 @@
+"0","```bash
+grep -n 'ACTTATCAGCCAACCTGTTA' $my_path/dejesus_mtb/data/SRR4113430_1.fastq | wc -l
+```"

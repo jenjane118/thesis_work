@@ -1,0 +1,34 @@
+"0","```r
+dejesus_40_df<-read.csv(\"SRR4113440_1.wig\", sep = \" \", skip=2, header=TRUE, row.names=NULL, col.names=c('position', 'count'))
+View(dejesus_40_df[1:50,])
+
+# find raw number of ta sites inserted for TTR normalised (sum of reads is not 0)
+tot_40 <- dejesus_40_df[,2]
+ins_count_40<-0
+for (i in 1:length(tot_40)){
+  if (tot_40[i] != 0.0){
+    ins_count_40 <- ins_count_40 + 1
+  }
+}
+
+length(tot_40)
+# 74603
+ins_count_40
+# 39247
+
+#insertion density
+id_40<-ins_count_40/length(tot_40)
+id_40
+# 0.526078
+
+max(tot_40)
+# 4121
+
+mean(tot_40)
+# 29.79875
+
+#non zero mean 
+is.na(tot_40) <- tot_40==0.0
+mean(tot_40, na.rm=TRUE) 
+# 56.64321
+```"
